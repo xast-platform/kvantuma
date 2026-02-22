@@ -24,7 +24,7 @@ pub trait Material {
     ) -> ShaderResource;
 }
 
-#[derive(Pod, Zeroable, Clone, Copy)]
+#[derive(Pod, Zeroable, Clone, Copy, Debug)]
 #[repr(C)]
 pub struct Vertex {
     pub position: Vec3,

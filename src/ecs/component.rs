@@ -33,18 +33,18 @@ pub struct ErasedComponent {
 #[macro_export]
 macro_rules! component {
     {POD: $name:ident} => {
-        impl Component for $name {
-            fn component_id() -> ComponentId {
-                component_id::<$name>()
+        impl $crate::ecs::component::Component for $name {
+            fn component_id() -> $crate::ecs::component::ComponentId {
+                $crate::ecs::component::component_id::<$name>()
             }
-            fn id(&self) -> ComponentId {
-                component_id::<$name>()
+            fn id(&self) -> $crate::ecs::component::ComponentId {
+                $crate::ecs::component::component_id::<$name>()
             }
             fn layout(&self) -> std::alloc::Layout {
                 std::alloc::Layout::new::<Self>()
             }
-            fn kind(&self) -> ComponentKind {
-                ComponentKind::Pod
+            fn kind(&self) -> $crate::ecs::component::ComponentKind {
+                $crate::ecs::component::ComponentKind::Pod
             }
             fn drop_fn(&self) -> Option<unsafe fn(*mut u8)> {
                 None
@@ -100,6 +100,6 @@ pub struct ComponentMeta {
 }
 
 pub struct ComponentQuery {
-    id: ComponentId,
-    access: Access,
+    _id: ComponentId,
+    _access: Access,
 }

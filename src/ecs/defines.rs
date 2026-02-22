@@ -1,3 +1,4 @@
-use crate::{component, render::material::TintedTextureMaterial};
+use crate::render::material::TintedTextureMaterial;
+use crate::component;
 
 component! { EXTERN: TintedTextureMaterial }

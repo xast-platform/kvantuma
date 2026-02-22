@@ -1,3 +1,5 @@
+use pretty_type_name::pretty_type_name;
+
 use super::archetype::*;
 use super::component::*;
 
@@ -111,12 +113,6 @@ impl World {
     }
 }
 
-#[derive(Debug)]
-pub struct ErasedQueryResult<'a> {
-    pub entity: EntityId,
-    pub components: Vec<ComponentQuery<'a>>,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Access {
     Read,
@@ -126,108 +122,210 @@ pub enum Access {
 pub const READ: Access = Access::Read;
 pub const WRITE: Access = Access::Write;
 
-#[derive(Debug)]
-pub enum ComponentQuery<'a> {
-    Read(&'a [u8]),
-    Write(&'a mut [u8]),
-}
-
 impl World {
-    pub fn query_erased(&mut self, components: &[(ComponentId, Access)]) -> Vec<ErasedQueryResult<'_>> {
-        let mut results = Vec::new();
+    pub fn query_erased_for_each<F>(&mut self, components: &[(ComponentId, Access)], mut f: F)
+    where
+        F: FnMut(EntityId, &[(*mut u8, usize, Access)]),
+    {
         let ids = components
             .iter()
             .map(|(id, _)| *id)
             .collect::<Vec<_>>();
 
         for archetype in &mut self.archetypes {
-            if archetype.has_components(&ids) {
-                let len = archetype.entities.len();
+            if !archetype.has_components(&ids) { continue }
 
-                let column_indices: Vec<(usize, Access)> = components
-                    .iter()
-                    .map(|(id, access)| (
-                        archetype.columns.iter().position(|col| col.meta.id == *id).unwrap(),
-                        *access
-                    ))
-                    .collect();
-                let columns: Vec<(&Column, Access)> = column_indices
-                    .iter()
-                    .map(|&(idx, access)| (&archetype.columns[idx], access))
-                    .collect();
+            let len = archetype.entities().len();
+            let column_indices: Vec<(usize, Access)> = components
+                .iter()
+                .map(|(id, access)| (
+                    archetype.column_index(*id).unwrap(),
+                    *access
+                ))
+                .collect();
 
-                for i in 0..len {
-                    let mut comps = Vec::with_capacity(components.len());
-                    for (col, access) in &columns {
-                        unsafe {
-                            let ptr = col.ptr.as_ptr().add(i * col.meta.layout.size());
-                            let slice = match *access {
-                                READ => ComponentQuery::Read(
-                                    std::slice::from_raw_parts(ptr, col.meta.layout.size()),
-                                ),
-                                WRITE => ComponentQuery::Write(
-                                    std::slice::from_raw_parts_mut(ptr, col.meta.layout.size()),
-                                ),
-                            };
-                            comps.push(slice);
-                        }
+            let base_ptr = archetype.columns_mut().as_mut_ptr();
+            let mut ptrs: Vec<(*mut u8, usize, Access)> = Vec::with_capacity(components.len());
+
+            for i in 0..len {
+                ptrs.clear();
+                for (idx, access) in &column_indices {
+                    unsafe {
+                        let col_ptr = base_ptr.add(*idx);
+                        let layout_size = (*col_ptr).component_meta().layout.size();
+                        let data_ptr = (*col_ptr).as_ptr().add(i * layout_size);
+                        ptrs.push((data_ptr, layout_size, *access));
                     }
-                    results.push(ErasedQueryResult {
-                        entity: archetype.entities[i],
-                        components: comps,
-                    });
                 }
+
+                f(archetype.entities()[i], ptrs.as_slice());
             }
         }
+    }
 
-        results
+    pub fn for_each<'w, Q: Query<'w>, F>(&'w mut self, f: F)
+    where
+        F: FnMut(Q::Result),
+    {
+        Q::for_each_world(self, f)
     }
 
     pub fn query<'w, Q: Query<'w>>(&'w mut self) -> Vec<Q::Result> {
-        Q::query_world(self)
+        let mut out = Vec::new();
+        self.for_each::<Q, _>(|r| out.push(r));
+        out
     }
 }
 
 pub trait Query<'w> {
     type Result: 'w;
 
-    fn query_world(world: &'w mut World) -> Vec<Self::Result>;
+    fn for_each_world<F>(world: &'w mut World, f: F)
+    where
+        F: FnMut(Self::Result);
 }
 
 impl<'w, A: Component + 'w> Query<'w> for &A {
     type Result = &'w A;
 
-    fn query_world(world: &'w mut World) -> Vec<Self::Result> {
-        world
-            .query_erased(&[(A::component_id(), READ)])
-            .into_iter()
-            .map(|res| {
-                let ComponentQuery::Read(comp_a) = &res.components[0] else { unreachable!() };
-                unsafe { &*(comp_a.as_ptr() as *const A) }
-            })
-            .collect()
+    fn for_each_world<F>(world: &'w mut World, mut f: F)
+    where
+        F: FnMut(Self::Result),
+    {
+        world.query_erased_for_each(&[(A::component_id(), READ)], |_, ptrs| {
+            let (ptr, size, _) = ptrs[0];
+            let slice = unsafe { std::slice::from_raw_parts(ptr as *const u8, size) };
+            let a = unsafe { &*(slice.as_ptr() as *const A) };
+            f(a);
+        });
     }
 }
 
 impl<'w, A: Component + 'w, B: Component + 'w> Query<'w> for (&A, &B) {
     type Result = (&'w A, &'w B);
 
-    fn query_world(world: &'w mut World) -> Vec<Self::Result> {
-        world
-            .query_erased(&[
-                (A::component_id(), READ),
-                (B::component_id(), READ),
-            ])
-            .into_iter()
-            .map(|res| {
-                let ComponentQuery::Read(comp_a) = &res.components[0] else { unreachable!() };
-                let ComponentQuery::Read(comp_b) = &res.components[1] else { unreachable!() };
-                (
-                    unsafe { &*(comp_a.as_ptr() as *const A) },
-                    unsafe { &*(comp_b.as_ptr() as *const B) }
-                )
-            })
-            .collect()
+    fn for_each_world<F>(world: &'w mut World, mut f: F)
+    where
+        F: FnMut(Self::Result),
+    {
+        if A::component_id() == B::component_id() {
+            panic!(
+                "Invalid query (&{}, &{}): cannot borrow the same component type as immutable twice",
+                pretty_type_name::<A>(),
+                pretty_type_name::<B>(),
+            );
+        }
+
+        world.query_erased_for_each(&[
+            (A::component_id(), READ),
+            (B::component_id(), READ),
+        ], |_, ptrs| {
+            let (ptr_a, size_a, _) = ptrs[0];
+            let (ptr_b, size_b, _) = ptrs[1];
+            let slice_a = unsafe { std::slice::from_raw_parts(ptr_a as *const u8, size_a) };
+            let slice_b = unsafe { std::slice::from_raw_parts(ptr_b as *const u8, size_b) };
+            let a = unsafe { &*(slice_a.as_ptr() as *const A) };
+            let b = unsafe { &*(slice_b.as_ptr() as *const B) };
+            f((a, b));
+        });
+    }
+}
+
+impl<'w, A: Component + 'w, B: Component + 'w> Query<'w> for (&A, &mut B) {
+    type Result = (&'w A, &'w mut B);
+
+    fn for_each_world<F>(world: &'w mut World, mut f: F)
+    where
+        F: FnMut(Self::Result),
+    {
+        if A::component_id() == B::component_id() {
+            panic!(
+                "Invalid query (&{}, &mut {}): cannot borrow the same component type as both immutable and mutable",
+                pretty_type_name::<A>(),
+                pretty_type_name::<B>(),
+            );
+        }
+
+        world.query_erased_for_each(&[
+            (A::component_id(), READ),
+            (B::component_id(), WRITE),
+        ], |_, ptrs| {
+            let (ptr_a, size_a, _) = ptrs[0];
+            let (ptr_b, size_b, access_b) = ptrs[1];
+            let slice_a = unsafe { std::slice::from_raw_parts(ptr_a as *const u8, size_a) };
+            let a = unsafe { &*(slice_a.as_ptr() as *const A) };
+            let b = match access_b {
+                WRITE => unsafe { &mut *(std::slice::from_raw_parts_mut(ptr_b, size_b).as_mut_ptr() as *mut B) },
+                _ => unreachable!(),
+            };
+            f((a, b));
+        });
+    }
+}
+
+impl<'w, A: Component + 'w, B: Component + 'w> Query<'w> for (&mut A, &mut B) {
+    type Result = (&'w mut A, &'w mut B);
+
+    fn for_each_world<F>(world: &'w mut World, mut f: F)
+    where
+        F: FnMut(Self::Result),
+    {
+        if A::component_id() == B::component_id() {
+            panic!(
+                "Invalid query (&mut {}, &mut {}): cannot borrow the same component type as mutable twice",
+                pretty_type_name::<A>(),
+                pretty_type_name::<B>(),
+            );
+        }
+
+        world.query_erased_for_each(&[
+            (A::component_id(), WRITE),
+            (B::component_id(), WRITE),
+        ], |_, ptrs| {
+            let (ptr_a, size_a, access_a) = ptrs[0];
+            let (ptr_b, size_b, access_b) = ptrs[1];
+            let a = match access_a {
+                WRITE => unsafe { &mut *(std::slice::from_raw_parts_mut(ptr_a, size_a).as_mut_ptr() as *mut A) },
+                _ => unreachable!(),
+            };
+            let b = match access_b {
+                WRITE => unsafe { &mut *(std::slice::from_raw_parts_mut(ptr_b, size_b).as_mut_ptr() as *mut B) },
+                _ => unreachable!(),
+            };
+            f((a, b));
+        });
+    }
+}
+
+impl<'w, A: Component + 'w, B: Component + 'w> Query<'w> for (&mut A, &B) {
+    type Result = (&'w mut A, &'w B);
+
+    fn for_each_world<F>(world: &'w mut World, mut f: F)
+    where
+        F: FnMut(Self::Result),
+    {
+        if A::component_id() == B::component_id() {
+            panic!(
+                "Invalid query (&mut {}, &{}): cannot borrow the same component type as both immutable and mutable",
+                pretty_type_name::<A>(),
+                pretty_type_name::<B>(),
+            );
+        }
+
+        world.query_erased_for_each(&[
+            (A::component_id(), WRITE),
+            (B::component_id(), READ),
+        ], |_, ptrs| {
+            let (ptr_a, size_a, access_a) = ptrs[0];
+            let (ptr_b, size_b, _) = ptrs[1];
+            let a = match access_a {
+                WRITE => unsafe { &mut *(std::slice::from_raw_parts_mut(ptr_a, size_a).as_mut_ptr() as *mut A) },
+                _ => unreachable!(),
+            };
+            let slice_b = unsafe { std::slice::from_raw_parts(ptr_b as *const u8, size_b) };
+            let b = unsafe { &*(slice_b.as_ptr() as *const B) };
+            f((a, b));
+        });
     }
 }
 
@@ -256,11 +354,3 @@ impl_components_bundle_tuple! { A, B, C, D, E }
 impl_components_bundle_tuple! { A, B, C, D, E, F }
 impl_components_bundle_tuple! { A, B, C, D, E, F, G }
 impl_components_bundle_tuple! { A, B, C, D, E, F, G, H }
-impl_components_bundle_tuple! { A, B, C, D, E, F, G, H, I }
-impl_components_bundle_tuple! { A, B, C, D, E, F, G, H, I, J }
-impl_components_bundle_tuple! { A, B, C, D, E, F, G, H, I, J, K }
-impl_components_bundle_tuple! { A, B, C, D, E, F, G, H, I, J, K, L }
-impl_components_bundle_tuple! { A, B, C, D, E, F, G, H, I, J, K, L, M }
-impl_components_bundle_tuple! { A, B, C, D, E, F, G, H, I, J, K, L, M, N }
-impl_components_bundle_tuple! { A, B, C, D, E, F, G, H, I, J, K, L, M, N, O }
-impl_components_bundle_tuple! { A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P }

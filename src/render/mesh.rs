@@ -6,7 +6,7 @@ pub struct Mesh<V> {
 }
 
 impl<V> Drawable for Mesh<V> {
-    fn update(&mut self, render_device: &mut super::RenderDevice, world: &mut super::registry::RenderRegistry) {
+    fn update(&mut self, _render_device: &mut super::RenderDevice, _world: &mut super::registry::RenderRegistry) {
         todo!()
     }
 

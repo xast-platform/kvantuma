@@ -1,11 +1,12 @@
-use std::{alloc::{Layout, alloc}, ptr::NonNull};
+use std::{alloc::{Layout, alloc, realloc, dealloc}, ptr::NonNull};
+// dense vec used for column lookup; no external map needed
 
 use crate::ecs::component::{Component, ComponentId, ComponentKind, ErasedComponent};
 
 use super::component::ComponentMeta;
 
-const MAX_COMPONENTS: usize = 256;
-const WORDS: usize = MAX_COMPONENTS / u64::BITS as usize;
+pub const MAX_COMPONENTS: usize = 256;
+pub const WORDS: usize = MAX_COMPONENTS / u64::BITS as usize;
 
 pub type EntityId = u32;
 
@@ -37,10 +38,10 @@ impl ArchetypeMask {
 }
 
 pub struct Column {
-    pub ptr: NonNull<u8>,
-    pub len: usize,
-    pub capacity: usize,
-    pub meta: ComponentMeta,
+    ptr: NonNull<u8>,
+    len: usize,
+    capacity: usize,
+    meta: ComponentMeta,
 }
 
 impl Column {
@@ -51,8 +52,6 @@ impl Column {
         kind: ComponentKind,
         drop_fn: Option<unsafe fn(*mut u8)>,
     ) -> Column {
-        let total_size = layout.size() * capacity;
-        let ptr = unsafe { alloc(Layout::from_size_align(total_size, layout.align()).unwrap()) };
         let meta = ComponentMeta {
             id,
             kind,
@@ -60,30 +59,37 @@ impl Column {
             drop_fn,
         };
 
-        Column {
-            ptr: NonNull::new(ptr).unwrap(),
-            len: 0,
-            capacity,
-            meta,
+        if meta.layout.size() == 0 {
+            Column {
+                ptr: NonNull::dangling(),
+                len: 0,
+                capacity: usize::MAX,
+                meta,
+            }
+        } else {
+            let total_size = meta.layout.size() * capacity;
+            let ptr_raw = unsafe { alloc(Layout::from_size_align(total_size, meta.layout.align()).unwrap()) };
+            Column {
+                ptr: NonNull::new(ptr_raw).unwrap(),
+                len: 0,
+                capacity,
+                meta,
+            }
         }
     }
 
     pub fn push(&mut self, component: &dyn Component) {
+        if self.meta.layout.size() == 0 {
+            self.len += 1;
+            return;
+        }
+
         if self.len >= self.capacity {
-            let new_capacity = self.capacity * 2;
+            let new_capacity = self.capacity.saturating_mul(2).max(1);
+            let old_size = self.meta.layout.size() * self.capacity;
             let new_size = self.meta.layout.size() * new_capacity;
-            let new_ptr = unsafe { alloc(Layout::from_size_align(new_size, self.meta.layout.align()).unwrap()) };
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    self.ptr.as_ptr(),
-                    new_ptr,
-                    self.meta.layout.size() * self.len,
-                );
-                std::alloc::dealloc(
-                    self.ptr.as_ptr(),
-                    Layout::from_size_align(self.meta.layout.size() * self.capacity, self.meta.layout.align()).unwrap()
-                );
-            }
+            let old_layout = Layout::from_size_align(old_size, self.meta.layout.align()).unwrap();
+            let new_ptr = unsafe { realloc(self.ptr.as_ptr(), old_layout, new_size) };
             self.ptr = NonNull::new(new_ptr).unwrap();
             self.capacity = new_capacity;
         }
@@ -100,21 +106,17 @@ impl Column {
     }
 
     pub fn push_erased(&mut self, component: &ErasedComponent) {
+        if self.meta.layout.size() == 0 {
+            self.len += 1;
+            return;
+        }
+
         if self.len >= self.capacity {
-            let new_capacity = self.capacity * 2;
+            let new_capacity = self.capacity.saturating_mul(2).max(1);
+            let old_size = self.meta.layout.size() * self.capacity;
             let new_size = self.meta.layout.size() * new_capacity;
-            let new_ptr = unsafe { alloc(Layout::from_size_align(new_size, self.meta.layout.align()).unwrap()) };
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    self.ptr.as_ptr(),
-                    new_ptr,
-                    self.meta.layout.size() * self.len,
-                );
-                std::alloc::dealloc(
-                    self.ptr.as_ptr(),
-                    Layout::from_size_align(self.meta.layout.size() * self.capacity, self.meta.layout.align()).unwrap()
-                );
-            }
+            let old_layout = Layout::from_size_align(old_size, self.meta.layout.align()).unwrap();
+            let new_ptr = unsafe { realloc(self.ptr.as_ptr(), old_layout, new_size) };
             self.ptr = NonNull::new(new_ptr).unwrap();
             self.capacity = new_capacity;
         }
@@ -129,10 +131,22 @@ impl Column {
         }
         self.len += 1;
     }
+    
+    pub fn component_meta(&self) -> &ComponentMeta {
+        &self.meta
+    }
+
+    pub fn as_ptr(&mut self) -> *mut u8 {
+        self.ptr.as_ptr()
+    }
 }
 
 impl Drop for Column {
     fn drop(&mut self) {
+        if self.meta.layout.size() == 0 {
+            return;
+        }
+
         for i in 0..self.len {
             if let Some(drop_fn) = self.meta.drop_fn {
                 unsafe {
@@ -141,15 +155,16 @@ impl Drop for Column {
             }
         }
         unsafe {
-            std::alloc::dealloc(self.ptr.as_ptr(), Layout::from_size_align(self.meta.layout.size() * self.capacity, self.meta.layout.align()).unwrap());
+            dealloc(self.ptr.as_ptr(), Layout::from_size_align(self.meta.layout.size() * self.capacity, self.meta.layout.align()).unwrap());
         }
     }
 }
 
 pub struct Archetype {
-    pub mask: ArchetypeMask,
-    pub columns: Vec<Column>,
-    pub entities: Vec<EntityId>,
+    mask: ArchetypeMask,
+    columns: Vec<Column>,
+    entities: Vec<EntityId>,
+    column_map: Vec<Option<usize>>,
 }
 
 impl Archetype {
@@ -157,10 +172,20 @@ impl Archetype {
         mask: ArchetypeMask,
         columns: Vec<Column>,
     ) -> Archetype {
+        let mut map = vec![None; MAX_COMPONENTS];
+        for (i, col) in columns.iter().enumerate() {
+            let id = col.meta.id as usize;
+            if id >= MAX_COMPONENTS {
+                panic!("Component id {} exceeds MAX_COMPONENTS", id);
+            }
+            map[id] = Some(i);
+        }
+
         Archetype {
             mask,
             columns,
             entities: vec![],
+            column_map: map,
         }
     }
 
@@ -170,18 +195,39 @@ impl Archetype {
     }
 
     pub fn get_column_with_component(&mut self, id: ComponentId) -> Option<&Column> {
-        self.columns
-            .iter()
-            .find(|col| col.meta.id == id)
+        let id = id as usize;
+        if id >= MAX_COMPONENTS { return None }
+        self.column_map[id].map(|idx| &self.columns[idx])
     }
 
     pub fn get_column_with_component_mut(&mut self, id: ComponentId) -> Option<&mut Column> {
-        self.columns
-            .iter_mut()
-            .find(|col| col.meta.id == id)
+        let id = id as usize;
+        if id >= MAX_COMPONENTS { return None }
+        match self.column_map[id] {
+            Some(idx) => Some(&mut self.columns[idx]),
+            None => None,
+        }
     }
 
-    pub fn add_entity(&mut self, id: EntityId) {
+    pub fn column_index(&self, id: ComponentId) -> Option<usize> {
+        let id = id as usize;
+        if id >= MAX_COMPONENTS { return None }
+        self.column_map[id]
+    }
+
+    pub(super) fn add_entity(&mut self, id: EntityId) {
         self.entities.push(id);
+    }
+    
+    pub fn entities(&self) -> &[u32] {
+        &self.entities
+    }
+
+    pub fn columns(&self) -> &[Column] {
+        &self.columns
+    }
+
+    pub fn columns_mut(&mut self) -> &mut [Column] {
+        &mut self.columns
     }
 }

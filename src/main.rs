@@ -14,6 +14,7 @@ use kvantuma::{
     }
 };
 
+#[derive(Debug)]
 pub struct Triangle {
     pub vertex_data: [Vertex; 3],
     pub vertex_buffer: Option<BufferHandle>,
@@ -107,15 +108,19 @@ impl Game for KvantumaGame {
         let canvases: &[&dyn RenderSurface] = &[&canvas];
         let mut ctx = render_device.draw_ctx();
 
-        let (triangle, material) = world.query::<(&Triangle, &TintedTextureMaterial)>()[0];
-
         {
-            let mut render_pass = ctx.render_pass(canvases, render_device.depth_texture());
+            world.for_each::<(&Triangle, &TintedTextureMaterial), _>(|(triangle, material)| {
+                let mut render_pass = ctx.render_pass(canvases, render_device.depth_texture());
 
-            render_pass.draw(render_device, &self.registry, DrawDescriptor::<(), _> {
-                drawable: Some(triangle),
-                instance_data: None,
-                material,
+                render_pass.draw(render_device, &self.registry, DrawDescriptor::<(), _> {
+                    drawable: Some(triangle),
+                    instance_data: None,
+                    material,
+                });
+            });
+
+            world.for_each::<(&mut Triangle, &Triangle), _>(|a| {
+                dbg!(a);
             });
         }
 

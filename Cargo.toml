@@ -35,3 +35,11 @@ glfw = { version = "0.61.0", default-features = false, features = ["raw-window-h
 
 [target.'cfg(target_os = "macos")'.dependencies]
 glfw = { version = "0.61.0", default-features = false, features = ["raw-window-handle-v0-6"] }
+
+[dev-dependencies]
+criterion = "0.5"
+hecs = "0.10"
+
+[[bench]]
+name = "ecs"
+harness = false
