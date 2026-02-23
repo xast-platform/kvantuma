@@ -2,6 +2,10 @@ use std::{alloc::Layout, any::TypeId, collections::HashMap, sync::{OnceLock, ato
 
 use parking_lot::Mutex;
 
+pub trait ComponentsBundle {
+    fn for_each(&self, f: &mut dyn FnMut(&dyn Component));
+}
+
 static REGISTRY: OnceLock<Registry> = OnceLock::new();
 
 struct Registry {
@@ -9,18 +13,21 @@ struct Registry {
     next: AtomicU32,
 }
 
-pub fn component_id<T: 'static>() -> u32 {
+pub fn component_id<T: 'static>() -> ComponentId {
     let reg = REGISTRY.get_or_init(|| Registry {
         map: Default::default(),
         next: AtomicU32::new(1),
     });
 
     let mut map = reg.map.lock();
-    *map.entry(TypeId::of::<T>())
+
+    ComponentId(*map.entry(TypeId::of::<T>())
         .or_insert_with(|| reg.next.fetch_add(1, Ordering::Relaxed))
+    )
 }
 
-pub type ComponentId = u32;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ComponentId(pub(super) u32);
 
 pub struct ErasedComponent {
     pub id: ComponentId,

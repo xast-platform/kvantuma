@@ -23,8 +23,8 @@ impl ArchetypeMask {
 
         let mut mask = ArchetypeMask { words: [0; WORDS] };
         for &id in ids {
-            let word_index = (id as usize) / u64::BITS as usize;
-            let bit_index = (id as usize) % u64::BITS as usize;
+            let word_index = (id.0 as usize) / u64::BITS as usize;
+            let bit_index = (id.0 as usize) % u64::BITS as usize;
             mask.words[word_index] |= 1 << bit_index;
         }
 
@@ -47,7 +47,7 @@ pub struct Column {
 impl Column {
     pub fn new(
         capacity: usize, 
-        id: u32, 
+        id: ComponentId, 
         layout: Layout,
         kind: ComponentKind,
         drop_fn: Option<unsafe fn(*mut u8)>,
@@ -174,7 +174,7 @@ impl Archetype {
     ) -> Archetype {
         let mut map = vec![None; MAX_COMPONENTS];
         for (i, col) in columns.iter().enumerate() {
-            let id = col.meta.id as usize;
+            let id = col.meta.id.0 as usize;
             if id >= MAX_COMPONENTS {
                 panic!("Component id {} exceeds MAX_COMPONENTS", id);
             }
@@ -195,13 +195,13 @@ impl Archetype {
     }
 
     pub fn get_column_with_component(&mut self, id: ComponentId) -> Option<&Column> {
-        let id = id as usize;
+        let id = id.0 as usize;
         if id >= MAX_COMPONENTS { return None }
         self.column_map[id].map(|idx| &self.columns[idx])
     }
 
     pub fn get_column_with_component_mut(&mut self, id: ComponentId) -> Option<&mut Column> {
-        let id = id as usize;
+        let id = id.0 as usize;
         if id >= MAX_COMPONENTS { return None }
         match self.column_map[id] {
             Some(idx) => Some(&mut self.columns[idx]),
@@ -210,13 +210,9 @@ impl Archetype {
     }
 
     pub fn column_index(&self, id: ComponentId) -> Option<usize> {
-        let id = id as usize;
+        let id = id.0 as usize;
         if id >= MAX_COMPONENTS { return None }
         self.column_map[id]
-    }
-
-    pub(super) fn add_entity(&mut self, id: EntityId) {
-        self.entities.push(id);
     }
     
     pub fn entities(&self) -> &[u32] {
@@ -229,5 +225,9 @@ impl Archetype {
 
     pub fn columns_mut(&mut self) -> &mut [Column] {
         &mut self.columns
+    }
+
+    pub(super) fn add_entity(&mut self, id: EntityId) {
+        self.entities.push(id);
     }
 }

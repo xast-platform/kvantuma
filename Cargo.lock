@@ -1475,6 +1475,7 @@ dependencies = [
  "kira",
  "log",
  "parking_lot",
+ "paste",
  "pollster",
  "pretty-type-name",
  "pretty_env_logger",

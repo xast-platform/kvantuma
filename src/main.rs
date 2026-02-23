@@ -118,10 +118,6 @@ impl Game for KvantumaGame {
                     material,
                 });
             });
-
-            world.for_each::<(&mut Triangle, &Triangle), _>(|a| {
-                dbg!(a);
-            });
         }
 
         ctx.apply(canvas, render_device);
