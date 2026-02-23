@@ -73,6 +73,20 @@ impl TintedTextureMaterial {
             tint_buffer,
         })
     }
+
+    pub fn update_tint(
+        &mut self,
+        new_tint: Vec3,
+        render_device: &RenderDevice,
+        registry: &mut RenderRegistry,
+    ) {
+        self.tint = new_tint;
+        registry
+            .get_buffer(self.tint_buffer)
+            .expect("Cannot update tint buffer")
+            .fill_exact(render_device, 0, &[new_tint])
+            .expect("Failed to update tint buffer");
+    }
 }
 
 impl Material for TintedTextureMaterial {

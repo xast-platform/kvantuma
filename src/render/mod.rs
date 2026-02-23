@@ -206,10 +206,14 @@ impl RenderSurface for Canvas {
 /// Trait for drawable objects.
 pub trait Drawable {
     /// Updates the drawable object's render_device data
-    fn update(&mut self, render_device: &mut RenderDevice, world: &mut RenderRegistry);
+    fn update(&mut self, render_device: &mut RenderDevice, registry: &mut RenderRegistry);
 
     /// Retrieves the ID of the vertex buffer used by the drawable.
     fn vertex_buffer(&self) -> BufferHandle;
+
+    fn index_buffer(&self) -> Option<BufferHandle>;
+
+    fn indices(&self) -> u32;
 }
 
 /// Trait used to convert Rust data structures to GPU-friendly ones.

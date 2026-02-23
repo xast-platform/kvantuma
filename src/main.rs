@@ -1,18 +1,17 @@
+use ab_glyph::{Font, FontRef, Glyph, PxScale, point};
 use glam::{Vec2, Vec3};
 use kvantuma::{
     app::{
         App, Game,
         window::{WindowDescriptor, WindowMode},
-    }, component, ecs::world::World, render::{
-        Drawable, RenderDevice, RenderSurface, 
-        buffer::BufferHandle, 
-        error::RenderError, 
-        material::{TintedTextureMaterial, Vertex}, 
-        pass::DrawDescriptor, 
-        registry::RenderRegistry,
-        types::*,
+    }, 
+    component, 
+    ecs::world::World,
+    render::{
+        Drawable, RenderDevice, RenderSurface, buffer::BufferHandle, error::RenderError, material::{TintedTextureMaterial, Vertex}, pass::DrawDescriptor, registry::RenderRegistry, texture::TextureHandle, types::*
     }
 };
+use taffy::TaffyTree;
 
 #[derive(Debug)]
 pub struct Triangle {
@@ -26,17 +25,17 @@ impl Drawable for Triangle {
     fn update(
         &mut self, 
         render_device: &mut RenderDevice,
-        world: &mut RenderRegistry,
+        registry: &mut RenderRegistry,
     ) {
         if self.vertex_buffer.is_none() {
             self.vertex_buffer = Some(
-                world.new_buffer::<Vertex>(render_device, 3, BufferUsages::VERTEX)
+                registry.new_buffer::<Vertex>(render_device, 3, BufferUsages::VERTEX)
             );
         }
 
         let Some(handle) = self.vertex_buffer else { unreachable!() };
         
-        world
+        registry
             .get_buffer(handle) 
             .expect("Cannot call update() on Triangle")
             .fill_exact(render_device, 0, &self.vertex_data)
@@ -47,6 +46,14 @@ impl Drawable for Triangle {
     fn vertex_buffer(&self) -> BufferHandle {
         self.vertex_buffer
             .expect("Triangle is not set up with update()")
+    }
+
+    fn index_buffer(&self) -> Option<BufferHandle> {
+        None
+    }
+
+    fn indices(&self) -> u32 {
+        0
     }
 }
 
@@ -76,6 +83,11 @@ struct KvantumaGame {
     registry: RenderRegistry,
 }
 
+pub struct TextMaterial {
+    atlas: TextureHandle,
+}
+
+
 impl Game for KvantumaGame {
     fn init(&mut self, world: &mut World, render_device: &mut RenderDevice) -> anyhow::Result<()> {
         self.registry.register_material::<TintedTextureMaterial>(render_device);
@@ -90,7 +102,19 @@ impl Game for KvantumaGame {
             &mut self.registry,
         )?;
 
+        let tree = TaffyTree::<()>::new();
+        let font = self.registry.new_font(
+            FontRef::try_from_slice(include_bytes!("../assets/fonts/KVANTUMA1451.ttf"))?
+        );
+        self.registry.add_font_atlas(render_device, font, 64);
+        self.registry
+            .get_atlas(font, 64)
+            .unwrap()
+            .image()
+            .save("atlas.png")?;
+
         world.spawn((triangle, material));
+        // world.spawn((tree,));
 
         Ok(())
     }
@@ -109,8 +133,10 @@ impl Game for KvantumaGame {
         let mut ctx = render_device.draw_ctx();
 
         {
-            world.for_each::<(&Triangle, &TintedTextureMaterial), _>(|(triangle, material)| {
+            world.for_each::<(&Triangle, &mut TintedTextureMaterial), _>(|(triangle, material)| {
                 let mut render_pass = ctx.render_pass(canvases, render_device.depth_texture());
+
+                material.update_tint(rand::random(), render_device, &mut self.registry);
 
                 render_pass.draw(render_device, &self.registry, DrawDescriptor::<(), _> {
                     drawable: Some(triangle),

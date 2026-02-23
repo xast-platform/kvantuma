@@ -89,7 +89,18 @@ impl<'a> RenderPass<'a> {
             };
 
             self.pass.set_vertex_buffer(0, buffer.inner().slice(..)); 
-            self.pass.draw(0..buffer.capacity() as u32, 0..1);
+
+            if let Some(handle) = drawable.index_buffer() {
+                let Some(index_buffer) = registry.get_buffer(handle) else {
+                    log::error!("This drawable has invalid index buffer");
+                    return;
+                };
+
+                self.pass.set_index_buffer(index_buffer.inner().slice(..), wgpu::IndexFormat::Uint32);
+                self.pass.draw_indexed(0..drawable.indices(), 0, 0..1);
+            } else {
+                self.pass.draw(0..buffer.capacity() as u32, 0..1);
+            }
         } else {
             self.pass.draw(0..6, 0..1);
         }

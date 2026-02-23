@@ -1,11 +1,13 @@
 use std::{any::TypeId, collections::HashMap};
 
+use ab_glyph::FontRef;
 use bytemuck::Pod;
 use image::ImageError;
 use slotmap::SlotMap;
 
 use crate::render::pipeline::RenderPipelineDescriptor;
 use crate::render::texture::TextureDescriptor;
+use crate::ui::atlas::{Atlas, FontData, FontHandle, atlas_size};
 
 use super::types::*;
 use super::{
@@ -21,6 +23,7 @@ pub struct RenderRegistry {
     pipelines: HashMap<TypeId, Pipeline>,
     buffers: SlotMap<BufferHandle, BufferStorage>,
     textures: SlotMap<TextureHandle, Texture>,
+    fonts: SlotMap<FontHandle, FontData>,
 }
 
 impl RenderRegistry {
@@ -85,7 +88,7 @@ impl RenderRegistry {
         descriptor.height = image.height();
 
         let texture = Texture::new(render_device, descriptor);
-        texture.fill(render_device, image);
+        texture.fill(render_device, &image);
 
         Ok(self.textures.insert(texture))
     }
@@ -96,5 +99,46 @@ impl RenderRegistry {
 
     pub fn get_texture_mut(&mut self, handle: TextureHandle) -> Option<&mut Texture> {
         self.textures.get_mut(handle)
+    }
+
+    pub fn new_font(&mut self, font: FontRef<'static>) -> FontHandle {
+        self.fonts.insert(FontData::new(font))
+    }
+
+    pub fn get_font(&self, handle: FontHandle) -> Option<&FontRef<'static>> {
+        self.fonts.get(handle)
+            .map(|d| &d.font)
+    }
+
+    pub fn add_font_atlas(&mut self, render_device: &RenderDevice, handle: FontHandle, font_size: u32) {
+        if self.fonts.get(handle).is_some() {
+            let Some(atlas_size) = atlas_size(font_size) else {
+                log::error!("Invalid size {} for font atlas", font_size);
+                return;
+            };
+            
+            let texture = self.new_texture(render_device, TextureDescriptor {
+                width: atlas_size as u32,
+                height: atlas_size as u32,
+                label: "Font atlas".to_owned(),
+                format: TextureFormat::R8Uint,
+                ..Default::default()
+            });
+
+            let font_data = self.fonts.get_mut(handle).unwrap();
+            font_data.atlases.register_atlas(font_size, &font_data.font, texture);
+
+            let atlas = self.get_atlas(handle, font_size).unwrap();
+            self.get_texture(texture)
+                .unwrap()
+                .fill(render_device, atlas.image());
+        } else {
+            log::error!("Font handle {:?} does not exist", handle);
+        }
+    }
+
+    pub fn get_atlas(&self, font_handle: FontHandle, font_size: u32) -> Option<&Atlas> {
+        self.fonts.get(font_handle)
+            .and_then(|data| data.atlases.get_atlas(font_size))
     }
 }

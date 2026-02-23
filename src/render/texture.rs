@@ -181,7 +181,7 @@ impl Texture {
     pub fn fill<P: Pixel<Subpixel = u8>>(
         &self, 
         render_device: &RenderDevice,
-        image: ImageBuffer<P, Vec<P::Subpixel>>,
+        image: &ImageBuffer<P, Vec<P::Subpixel>>,
     ) {
         let bytes_per_pixel = std::mem::size_of::<P>();
         let bytes_per_row = bytes_per_pixel * image.width() as usize;
