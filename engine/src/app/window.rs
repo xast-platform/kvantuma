@@ -1,4 +1,4 @@
-use glfw::{GlfwReceiver, WindowEvent};
+use glfw::GlfwReceiver;
 
 pub struct WindowDescriptor {
     pub title: &'static str,
@@ -24,3 +24,5 @@ pub enum WindowMode {
 }
 
 pub type Events = GlfwReceiver<(f64, WindowEvent)>;
+
+pub use glfw::{WindowEvent, Modifiers, Action, Scancode, Key, MouseButton};

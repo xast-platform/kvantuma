@@ -5,4 +5,5 @@ pub mod physics;
 pub mod ui;
 pub mod error;
 pub mod utils;
-pub mod game;
+
+pub use glam;

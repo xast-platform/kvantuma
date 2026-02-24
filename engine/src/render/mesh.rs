@@ -2,12 +2,24 @@ use bytemuck::Pod;
 
 use crate::render::{Drawable, RenderDevice, buffer::BufferHandle, registry::RenderRegistry, types::*};
 
+#[derive(Default)]
 pub struct Mesh<V> {
     pub vertices: Vec<V>,
     pub indices: Vec<u32>,
 
     pub vertex_buffer: Option<BufferHandle>,
     pub index_buffer: Option<BufferHandle>,
+}
+
+impl<V> Mesh<V> {
+    pub fn new(vertices: Vec<V>, indices: Vec<u32>) -> Mesh<V> {
+        Mesh {
+            vertices,
+            indices,
+            vertex_buffer: None,
+            index_buffer: None,
+        }
+    }
 }
 
 impl<V: Pod> Drawable for Mesh<V> {
@@ -20,7 +32,7 @@ impl<V: Pod> Drawable for Mesh<V> {
 
         if self.index_buffer.is_none() && !self.indices.is_empty() {
             self.index_buffer = Some(
-                registry.new_buffer::<u32>(render_device, self.indices.len(), BufferUsages::VERTEX)
+                registry.new_buffer::<u32>(render_device, self.indices.len(), BufferUsages::INDEX)
             );
         }
 

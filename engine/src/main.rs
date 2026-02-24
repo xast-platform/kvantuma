@@ -1,26 +1,17 @@
-use xastge::{
+use ab_glyph::{Font, FontRef, Glyph, PxScale, point};
+use glam::{Vec2, Vec3};
+use kvantuma::{
     app::{
         App, Game,
-        window::{WindowDescriptor, WindowEvent, WindowMode},
+        window::{WindowDescriptor, WindowMode},
     }, 
     component, 
     ecs::world::World,
-    glam::{Vec2, Vec3},
     render::{
-        Drawable, RenderDevice, RenderSurface, 
-        buffer::BufferHandle, 
-        error::RenderError, 
-        include_wgsl, 
-        material::{Material, TintedTextureMaterial, Vertex}, 
-        mesh::Mesh, 
-        pass::DrawDescriptor, 
-        registry::RenderRegistry, 
-        shader_resource::{ShaderResource, ShaderResourceLayout}, 
-        texture::{TextureHandle, TextureResourceDescriptor, TextureResourceUsage},
-        types::*,
-    }, 
-    ui::{atlas::GlyphVertex, glyph::FontRef}
+        Drawable, RenderDevice, RenderSurface, buffer::BufferHandle, error::RenderError, material::{Material, TintedTextureMaterial, Vertex}, mesh::Mesh, pass::DrawDescriptor, registry::RenderRegistry, shader_resource::{ShaderResource, ShaderResourceLayout}, texture::{TextureHandle, TextureResourceDescriptor, TextureResourceUsage}, types::*
+    }, ui::atlas::GlyphVertex
 };
+use wgpu::include_wgsl;
 
 #[derive(Debug)]
 pub struct Triangle {
@@ -228,7 +219,7 @@ impl Game for KvantumaGame {
         Ok(())
     }
 
-    fn input(&mut self, _event: &WindowEvent, _world: &mut World) -> anyhow::Result<bool> {
+    fn input(&mut self, _event: &glfw::WindowEvent, _world: &mut World) -> anyhow::Result<bool> {
         Ok(false)
     }
 
@@ -240,6 +231,7 @@ impl Game for KvantumaGame {
         {
             world.for_each::<(&Triangle, &mut TintedTextureMaterial), _>(|(triangle, material)| {
                 let mut render_pass = ctx.render_pass(canvases, render_device.depth_texture());
+                material.update_tint(rand::random(), render_device, &mut self.registry);
                 render_pass.draw(render_device, &self.registry, DrawDescriptor::<(), _> {
                     drawable: Some(triangle),
                     instance_data: None,

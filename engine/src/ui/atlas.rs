@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use ab_glyph::{Font, FontRef, Glyph, PxScale, point};
+use bytemuck::{Pod, Zeroable};
 use glam::Vec2;
 use image::{GrayImage, Luma};
 use slotmap::new_key_type;
 
-use crate::render::texture::TextureHandle;
+use crate::render::{mesh::Mesh, texture::TextureHandle};
 
 pub const PADDING: u32 = 2;
 pub const CHARSET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,;:!()";
@@ -17,6 +18,28 @@ new_key_type! {
 pub struct FontData {
     pub(crate) font: FontRef<'static>,
     pub(crate) atlases: AtlasSet,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Pod, Zeroable)]
+pub struct GlyphVertex {
+    pos: Vec2,
+    uv: Vec2,
+}
+
+impl GlyphVertex {
+    const ATTRIBS: &[wgpu::VertexAttribute] = &wgpu::vertex_attr_array![
+        0 => Float32x2,
+        1 => Float32x2,
+    ];
+
+    pub fn vertex_buffer_layout() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<GlyphVertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: Self::ATTRIBS,
+        }
+    }
 }
 
 impl FontData {
@@ -115,11 +138,48 @@ impl AtlasSet {
                 advance: font.h_advance_unscaled(id) * scale.x,
             });
 
+            let ascent_px = (font.ascent_unscaled() / 1000.0 * scale.x) as i32;
+            let baseline_offset = (scale.x * 0.1) as i32;
+
             outlined.draw(|x, y, v| {
                 let px = cursor_x + x;
-                let py = cursor_y + y;
+                let py = cursor_y + (ascent_px + bounds.min.y as i32 + y as i32 - baseline_offset) as u32;
                 atlas.image[(px, py)] = Luma([(v * 255.0) as u8]);
             });
+
+            // let min_x = cursor_x;
+            // let min_y = cursor_y;
+            // let max_x = cursor_x + w - 1;
+            // let max_y = cursor_y + h - 1;
+
+            // for x in min_x..=max_x {
+            //     if min_y < atlas.size {
+            //         atlas.image[(x, min_y)] = Luma([0]);
+            //         if x % 2 == 0 {
+            //             atlas.image[(x, min_y)] = Luma([255]);
+            //         }
+            //     }
+            //     if max_y < atlas.size {
+            //         atlas.image[(x, max_y)] = Luma([0]);
+            //         if x % 2 == 0 {
+            //             atlas.image[(x, max_y)] = Luma([255]);
+            //         }
+            //     }
+            // }
+            // for y in min_y..=max_y {
+            //     if min_x < atlas.size {
+            //         atlas.image[(min_x, y)] = Luma([0]);
+            //         if y % 2 == 0 {
+            //             atlas.image[(min_x, y)] = Luma([255]);
+            //         }
+            //     }
+            //     if max_x < atlas.size {
+            //         atlas.image[(max_x, y)] = Luma([0]);
+            //         if y % 2 == 0 {
+            //             atlas.image[(max_x, y)] = Luma([255]);
+            //         }
+            //     }
+            // }
 
             cursor_x += w;
             row_height = row_height.max(h);
@@ -159,5 +219,37 @@ impl Atlas {
 
     pub fn image(&self) -> &GrayImage {
         &self.image
+    }
+
+    pub fn generate_mesh(&self, text: &str, start: Vec2) -> Mesh<GlyphVertex> {
+        let mut vertices = vec![];
+        let mut indices = vec![];
+        let mut cursor_x = start[0];
+        let cursor_y = start[1];
+        let mut idx_offset = 0;
+
+        for c in text.chars() {
+            if let Some(glyph) = self.glyphs.get(&c) {
+                let x0 = cursor_x + glyph.bearing[0];
+                let y0 = cursor_y - glyph.bearing[1];
+                let x1 = x0 + glyph.size[0];
+                let y1 = y0 + glyph.size[1];
+
+                vertices.push(GlyphVertex { pos: Vec2::new(x0, y0), uv: glyph.uv_min });
+                vertices.push(GlyphVertex { pos: Vec2::new(x1, y0), uv: Vec2::new(glyph.uv_max[0], glyph.uv_min[1]) });
+                vertices.push(GlyphVertex { pos: Vec2::new(x1, y1), uv: glyph.uv_max });
+                vertices.push(GlyphVertex { pos: Vec2::new(x0, y1), uv: Vec2::new(glyph.uv_min[0], glyph.uv_max[1]) });
+
+                indices.extend_from_slice(&[
+                    idx_offset, idx_offset+1, idx_offset+2,
+                    idx_offset, idx_offset+2, idx_offset+3,
+                ]);
+                idx_offset += 4;
+
+                cursor_x += glyph.advance;
+            }
+        }
+
+        Mesh::new(vertices, indices)
     }
 }

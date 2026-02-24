@@ -35,6 +35,8 @@ pub mod types {
     };
 }
 
+pub use wgpu::include_wgsl;
+
 use types::*;
 
 pub struct RenderDevice {

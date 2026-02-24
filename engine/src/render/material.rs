@@ -91,7 +91,7 @@ impl TintedTextureMaterial {
 
 impl Material for TintedTextureMaterial {
     fn shader() -> ShaderModuleDescriptor<'static> {
-        include_wgsl!("../../assets/shaders/basic.wgsl")
+        include_wgsl!("../../../assets/shaders/basic.wgsl")
     }
 
     fn vertex_layout() -> Option<VertexBufferLayout<'static>> {
