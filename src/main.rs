@@ -1,21 +1,20 @@
 use log::LevelFilter;
 use xastge::{
-    Transform, app::{
+    Transform, 
+    app::{
         App, Game,
         window::{WindowDescriptor, WindowEvent, WindowMode},
-    }, component, ecs::world::World, glam::{Quat, Vec2, Vec3}, render::{
-        Drawable, RenderDevice, RenderSurface, 
-        buffer::BufferHandle, 
-        error::RenderError, 
-        include_wgsl, 
-        material::{Material, TintedTextureMaterial, Vertex}, 
-        mesh::Mesh, 
-        pass::DrawDescriptor, 
-        registry::RenderRegistry, 
-        shader_resource::{ShaderResource, ShaderResourceLayout}, 
-        texture::{TextureHandle, TextureResourceDescriptor, TextureResourceUsage},
-        types::*,
-    }, ui::{atlas::GlyphVertex, glyph::FontRef}
+    }, 
+    component, 
+    ecs::world::World, 
+    glam::{Quat, Vec2, Vec3}, 
+    render::{
+        Drawable, RenderDevice, RenderSurface, buffer::BufferHandle, error::RenderError, include_wgsl, material::{Material, TintedTextureMaterial}, mesh::{Mesh, Vertex}, pass::DrawDescriptor, registry::RenderRegistry, shader_resource::{ShaderResource, ShaderResourceLayout}, texture::{TextureHandle, TextureResourceDescriptor, TextureResourceUsage}, types::*
+    }, 
+    ui::{
+        atlas::GlyphVertex, 
+        glyph::FontRef,
+    }
 };
 
 #[derive(Debug)]
@@ -68,14 +67,17 @@ impl Default for Triangle {
             vertex_data: [
                 Vertex {
                     position: Vec3::new(0.0, 0.5, 0.0),
+                    normal: Vec3::new(0.0, 0.0, 1.0),
                     texcoord: Vec2::new(0.5, 0.0),
                 },
                 Vertex {
                     position: Vec3::new(-0.5, -0.5, 0.0),
+                    normal: Vec3::new(0.0, 0.0, 1.0),
                     texcoord: Vec2::new(0.0, 1.0),
                 },
                 Vertex {
                     position: Vec3::new(0.5, -0.5, 0.0),
+                    normal: Vec3::new(0.0, 0.0, 1.0),
                     texcoord: Vec2::new(1.0, 1.0),
                 },
             ],
@@ -138,33 +140,21 @@ impl Game for KvantumaGame {
     fn init(&mut self, world: &mut World, render_device: &mut RenderDevice) -> anyhow::Result<()> {
         self.registry.register_material::<TintedTextureMaterial>(render_device);
         self.registry.register_material::<TextMaterial>(render_device);
-        
-        // Restore original triangle
-        let mut triangle = Triangle {
-            vertex_data: [
-                Vertex {
-                    position: Vec3::new(0.0, 0.5, 0.0),
-                    texcoord: Vec2::new(0.5, 0.0),
-                },
-                Vertex {
-                    position: Vec3::new(-0.5, -0.5, 0.0),
-                    texcoord: Vec2::new(0.0, 1.0),
-                },
-                Vertex {
-                    position: Vec3::new(0.5, -0.5, 0.0),
-                    texcoord: Vec2::new(1.0, 1.0),
-                },
-            ],
-            vertex_buffer: None,
-        };
-        triangle.update(render_device, &mut self.registry);
 
         let material = TintedTextureMaterial::new(
-            "assets/textures/test.png", 
+            "assets/textures/texture.jpg", 
             Vec3::new(0.0, 1.0, 0.5), 
             render_device, 
             &mut self.registry,
         )?;
+
+        let mut mdl = Mesh::load_obj("assets/meshes/monkey.obj");
+        mdl.update(render_device, &mut self.registry);
+
+        let transform_monkey = Transform {
+            translation: Vec3::new(0.0, 0.0, 0.0),
+            ..Default::default()
+        };
 
         let font = self.registry.new_font(
             FontRef::try_from_slice(include_bytes!("../assets/fonts/KVANTUMA1451.ttf"))?
@@ -183,7 +173,7 @@ impl Game for KvantumaGame {
         let text1 = "the quick brown fox jumps over the lazy dog!";
         let mut mesh1 = atlas.generate_mesh(text1, Vec2::ZERO);
         let transform1 = Transform {
-            position: Vec3::new(-0.5, 0.0, 0.0),
+            translation: Vec3::new(-0.5, 0.0, 0.0),
             scale: Vec3::ONE,
             rotation: Quat::IDENTITY,
         };
@@ -191,7 +181,7 @@ impl Game for KvantumaGame {
         let text2 = "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG!";
         let mut mesh2 = atlas.generate_mesh(text2, Vec2::ZERO);
         let transform2 = Transform {
-            position: Vec3::new(-0.7, 0.5, 0.0),
+            translation: Vec3::new(-0.7, 0.5, 0.0),
             scale: Vec3::ONE,
             rotation: Quat::IDENTITY,
         };
@@ -201,7 +191,7 @@ impl Game for KvantumaGame {
 
         world.spawn((mesh1, text_material.clone(), transform1));
         world.spawn((mesh2, text_material, transform2));
-        world.spawn((triangle, material));
+        world.spawn((mdl, material, transform_monkey));
 
         Ok(())
     }
@@ -219,41 +209,42 @@ impl Game for KvantumaGame {
         let canvases: &[&dyn RenderSurface] = &[&canvas];
         let mut ctx = render_device.draw_ctx();
 
-        // {
-        //     let mut render_pass = ctx.render_pass(
-        //         canvases, 
-        //         render_device.depth_texture(),
-        //         Operations {
-        //             load: LoadOp::Clear(Color::BLACK),
-        //             store: StoreOp::Store,
-        //         }
-        //     );
-        //     world.for_each::<(&Triangle, &mut TintedTextureMaterial), _>(|(triangle, material)| {
-        //         render_pass.draw(render_device, &self.registry, DrawDescriptor::<(), _> {
-        //             drawable: Some(triangle),
-        //             instance_data: None,
-        //             material,
-        //         });
-        //     });
-        // }
-
         {
             let mut render_pass = ctx.render_pass(
                 canvases, 
                 render_device.depth_texture(),
                 Operations {
-                    load: LoadOp::Load,
+                    load: LoadOp::Clear(Color::BLACK),
                     store: StoreOp::Store,
-                },
+                }
             );
-            world.for_each::<(&Mesh<GlyphVertex>, &TextMaterial, &Transform), _>(|(mesh, mat, t)| {
+            world.for_each::<(&Mesh<Vertex>, &TintedTextureMaterial, &Transform), _>(|(mesh, material, tr)| {
                 render_pass.draw(render_device, &self.registry, DrawDescriptor::<_, _> {
                     drawable: Some(mesh),
-                    instance_data: Some(t),
-                    material: mat,
+                    instance_data: Some(tr),
+                    material,
                 });
             });
         }
+
+        // ----------- UI render pass -----------
+        // {
+        //     let mut render_pass = ctx.render_pass(
+        //         canvases, 
+        //         render_device.depth_texture(),
+        //         Operations {
+        //             load: LoadOp::Load,
+        //             store: StoreOp::Store,
+        //         },
+        //     );
+        //     world.for_each::<(&Mesh<GlyphVertex>, &TextMaterial, &Transform), _>(|(mesh, mat, t)| {
+        //         render_pass.draw(render_device, &self.registry, DrawDescriptor::<_, _> {
+        //             drawable: Some(mesh),
+        //             instance_data: Some(t),
+        //             material: mat,
+        //         });
+        //     });
+        // }
 
         ctx.apply(canvas, render_device);
 
@@ -264,6 +255,7 @@ impl Game for KvantumaGame {
 fn main() -> anyhow::Result<()> {
     pretty_env_logger::formatted_builder()
         .filter_level(LevelFilter::Info)
+        .filter_module("wgpu_hal", LevelFilter::Off)
         .init();
 
     App::new(

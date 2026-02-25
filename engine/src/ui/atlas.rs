@@ -242,12 +242,6 @@ impl Atlas {
                 vertices.push(GlyphVertex { pos: Vec2::new(x1, y1) / self.size as f32, uv: Vec2::new(glyph.uv_max[0], glyph.uv_min[1]) });
                 vertices.push(GlyphVertex { pos: Vec2::new(x0, y1) / self.size as f32, uv: Vec2::new(glyph.uv_min[0], glyph.uv_min[1]) });
 
-                log::info!("Char '{}' at ({:.1}, {:.1}) size ({:.1}x{:.1}) UVs ({:.3}, {:.3})-({:.3}, {:.3})", 
-                    c, x0, y0, glyph.size[0], glyph.size[1], 
-                    glyph.uv_min[0], glyph.uv_min[1], 
-                    glyph.uv_max[0], glyph.uv_max[1],
-                );
-
                 indices.extend_from_slice(&[
                     idx_offset, idx_offset+1, idx_offset+2,
                     idx_offset, idx_offset+2, idx_offset+3,

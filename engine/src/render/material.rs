@@ -5,6 +5,7 @@ use wgpu::include_wgsl;
 
 use crate::render::RenderDevice;
 use crate::render::buffer::{BufferHandle, BufferResourceDescriptor};
+use crate::render::mesh::Vertex;
 use crate::render::texture::{Texture, TextureDescriptor, TextureResourceDescriptor, TextureResourceUsage};
 
 use super::{shader_resource::{ShaderResource, ShaderResourceLayout}, registry::RenderRegistry, texture::TextureHandle};
@@ -22,28 +23,6 @@ pub trait Material {
         render_device: &RenderDevice,
         registry: &RenderRegistry,
     ) -> ShaderResource;
-}
-
-#[derive(Pod, Zeroable, Clone, Copy, Debug)]
-#[repr(C)]
-pub struct Vertex {
-    pub position: Vec3,
-    pub texcoord: Vec2,
-}
-
-impl Vertex {
-    const ATTRIBS: &[wgpu::VertexAttribute] = &wgpu::vertex_attr_array![
-        0 => Float32x3,
-        1 => Float32x2,
-    ];
-
-    pub fn vertex_buffer_layout() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: Self::ATTRIBS,
-        }
-    }
 }
 
 #[derive(Debug)]
