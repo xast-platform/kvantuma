@@ -1,8 +1,8 @@
 use bytemuck::Pod;
 
-use crate::render::{Drawable, RenderDevice, buffer::BufferHandle, registry::RenderRegistry, types::*};
+use super::{Drawable, RenderDevice, buffer::BufferHandle, registry::RenderRegistry, types::*};
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Mesh<V> {
     pub vertices: Vec<V>,
     pub indices: Vec<u32>,

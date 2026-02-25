@@ -32,6 +32,10 @@ pub mod types {
         SamplerBindingType,
         ShaderModuleDescriptor,
         VertexBufferLayout,
+        Operations,
+        LoadOp,
+        StoreOp,
+        Color,
     };
 }
 

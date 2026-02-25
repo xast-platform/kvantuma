@@ -1,12 +1,9 @@
+use log::LevelFilter;
 use xastge::{
-    app::{
+    Transform, app::{
         App, Game,
         window::{WindowDescriptor, WindowEvent, WindowMode},
-    }, 
-    component, 
-    ecs::world::World,
-    glam::{Vec2, Vec3},
-    render::{
+    }, component, ecs::world::World, glam::{Quat, Vec2, Vec3}, render::{
         Drawable, RenderDevice, RenderSurface, 
         buffer::BufferHandle, 
         error::RenderError, 
@@ -18,8 +15,7 @@ use xastge::{
         shader_resource::{ShaderResource, ShaderResourceLayout}, 
         texture::{TextureHandle, TextureResourceDescriptor, TextureResourceUsage},
         types::*,
-    }, 
-    ui::{atlas::GlyphVertex, glyph::FontRef}
+    }, ui::{atlas::GlyphVertex, glyph::FontRef}
 };
 
 #[derive(Debug)]
@@ -92,6 +88,7 @@ struct KvantumaGame {
     registry: RenderRegistry,
 }
 
+#[derive(Clone)]
 pub struct TextMaterial {
     atlas: TextureHandle,
 }
@@ -169,33 +166,6 @@ impl Game for KvantumaGame {
             &mut self.registry,
         )?;
 
-        // Offset second triangle slightly to the left
-        let mut triangle2 = Triangle {
-            vertex_data: [
-                Vertex {
-                    position: Vec3::new(-0.2, 0.5, 0.0),
-                    texcoord: Vec2::new(0.5, 0.0),
-                },
-                Vertex {
-                    position: Vec3::new(-0.7, -0.5, 0.0),
-                    texcoord: Vec2::new(0.0, 1.0),
-                },
-                Vertex {
-                    position: Vec3::new(0.3, -0.5, 0.0),
-                    texcoord: Vec2::new(1.0, 1.0),
-                },
-            ],
-            vertex_buffer: None,
-        };
-        triangle2.update(render_device, &mut self.registry);
-
-        let material2 = TintedTextureMaterial::new(
-            "assets/textures/test.png", 
-            Vec3::new(0.0, 1.0, 0.5), 
-            render_device, 
-            &mut self.registry,
-        )?;
-
         let font = self.registry.new_font(
             FontRef::try_from_slice(include_bytes!("../assets/fonts/KVANTUMA1451.ttf"))?
         );
@@ -204,21 +174,33 @@ impl Game for KvantumaGame {
             .get_atlas(font, 64)
             .unwrap();
 
-        let text = "Hello text!";
-        let mut mesh = atlas.generate_mesh(text, Vec2::ZERO);
-        println!("Mesh vertices: {} indices: {}", mesh.vertices.len(), mesh.indices.len());
-        mesh.update(render_device, &mut self.registry);
-
-        let atlas = self.registry
-            .get_atlas(font, 64)
-            .unwrap();
-
         let text_material = TextMaterial {
             atlas: atlas.texture(),
         };
-        
-        world.spawn((mesh, text_material));
-        world.spawn((triangle2, material2));
+
+        atlas.image().save("atlas.png")?;
+
+        let text1 = "the quick brown fox jumps over the lazy dog!";
+        let mut mesh1 = atlas.generate_mesh(text1, Vec2::ZERO);
+        let transform1 = Transform {
+            position: Vec3::new(-0.5, 0.0, 0.0),
+            scale: Vec3::ONE,
+            rotation: Quat::IDENTITY,
+        };
+
+        let text2 = "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG!";
+        let mut mesh2 = atlas.generate_mesh(text2, Vec2::ZERO);
+        let transform2 = Transform {
+            position: Vec3::new(-0.7, 0.5, 0.0),
+            scale: Vec3::ONE,
+            rotation: Quat::IDENTITY,
+        };
+
+        mesh1.update(render_device, &mut self.registry);
+        mesh2.update(render_device, &mut self.registry);
+
+        world.spawn((mesh1, text_material.clone(), transform1));
+        world.spawn((mesh2, text_material, transform2));
         world.spawn((triangle, material));
 
         Ok(())
@@ -237,24 +219,38 @@ impl Game for KvantumaGame {
         let canvases: &[&dyn RenderSurface] = &[&canvas];
         let mut ctx = render_device.draw_ctx();
 
-        {
-            world.for_each::<(&Triangle, &mut TintedTextureMaterial), _>(|(triangle, material)| {
-                let mut render_pass = ctx.render_pass(canvases, render_device.depth_texture());
-                render_pass.draw(render_device, &self.registry, DrawDescriptor::<(), _> {
-                    drawable: Some(triangle),
-                    instance_data: None,
-                    material,
-                });
-            });
-        }
+        // {
+        //     let mut render_pass = ctx.render_pass(
+        //         canvases, 
+        //         render_device.depth_texture(),
+        //         Operations {
+        //             load: LoadOp::Clear(Color::BLACK),
+        //             store: StoreOp::Store,
+        //         }
+        //     );
+        //     world.for_each::<(&Triangle, &mut TintedTextureMaterial), _>(|(triangle, material)| {
+        //         render_pass.draw(render_device, &self.registry, DrawDescriptor::<(), _> {
+        //             drawable: Some(triangle),
+        //             instance_data: None,
+        //             material,
+        //         });
+        //     });
+        // }
 
         {
-            world.for_each::<(&Mesh<GlyphVertex>, &TextMaterial), _>(|(mesh, material)| {
-                let mut render_pass = ctx.render_pass(canvases, render_device.depth_texture());
-                render_pass.draw(render_device, &self.registry, DrawDescriptor::<(), _> {
+            let mut render_pass = ctx.render_pass(
+                canvases, 
+                render_device.depth_texture(),
+                Operations {
+                    load: LoadOp::Load,
+                    store: StoreOp::Store,
+                },
+            );
+            world.for_each::<(&Mesh<GlyphVertex>, &TextMaterial, &Transform), _>(|(mesh, mat, t)| {
+                render_pass.draw(render_device, &self.registry, DrawDescriptor::<_, _> {
                     drawable: Some(mesh),
-                    instance_data: None,
-                    material,
+                    instance_data: Some(t),
+                    material: mat,
                 });
             });
         }
@@ -266,7 +262,9 @@ impl Game for KvantumaGame {
 }
 
 fn main() -> anyhow::Result<()> {
-    pretty_env_logger::init();
+    pretty_env_logger::formatted_builder()
+        .filter_level(LevelFilter::Info)
+        .init();
 
     App::new(
         WindowDescriptor {

@@ -9,6 +9,7 @@ use crate::render::{mesh::Mesh, texture::TextureHandle};
 
 pub const PADDING: u32 = 2;
 pub const CHARSET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,;:!()";
+// TODO: implement other glyphs in the font
 // pub const CHARSET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,;:!?()АБВГҐДЕЄЖЗИІЇЙКЛМНОПРСТУФХЦЧШЩЬЮЯабвгґдеєжзиіїйклмнопрстуфхцчшщьюя0123456789";
 
 new_key_type! {
@@ -21,10 +22,10 @@ pub struct FontData {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Pod, Zeroable)]
+#[derive(Copy, Clone, Pod, Zeroable, Debug)]
 pub struct GlyphVertex {
-    pos: Vec2,
-    uv: Vec2,
+    pub pos: Vec2,
+    pub uv: Vec2,
 }
 
 impl GlyphVertex {
@@ -125,6 +126,7 @@ impl AtlasSet {
                 cursor_x as f32 / atlas_size as f32, 
                 cursor_y as f32 / atlas_size as f32,
             );
+
             let uv_max = Vec2::new(
                 (cursor_x + w) as f32 / atlas_size as f32, 
                 (cursor_y + h) as f32 / atlas_size as f32,
@@ -135,15 +137,15 @@ impl AtlasSet {
                 uv_max,
                 size: Vec2::new(w as f32, h as f32),
                 bearing: Vec2::new(bounds.min.x, bounds.min.y),
-                advance: font.h_advance_unscaled(id) * scale.x,
+                advance: font.h_advance_unscaled(id) / 1000.0 * scale.x,
             });
 
-            let ascent_px = (font.ascent_unscaled() / 1000.0 * scale.x) as i32;
-            let baseline_offset = (scale.x * 0.1) as i32;
-
+            // TODO: calculate this somehow for different fonts
+            const OFFSET: u32 = 25;
+ 
             outlined.draw(|x, y, v| {
                 let px = cursor_x + x;
-                let py = cursor_y + (ascent_px + bounds.min.y as i32 + y as i32 - baseline_offset) as u32;
+                let py = cursor_y + (bounds.min.y as i32 + y as i32) as u32 - OFFSET;
                 atlas.image[(px, py)] = Luma([(v * 255.0) as u8]);
             });
 
@@ -230,15 +232,21 @@ impl Atlas {
 
         for c in text.chars() {
             if let Some(glyph) = self.glyphs.get(&c) {
-                let x0 = cursor_x + glyph.bearing[0];
-                let y0 = cursor_y - glyph.bearing[1];
+                let x0 = cursor_x;
+                let y0 = cursor_y;
                 let x1 = x0 + glyph.size[0];
                 let y1 = y0 + glyph.size[1];
 
-                vertices.push(GlyphVertex { pos: Vec2::new(x0, y0), uv: glyph.uv_min });
-                vertices.push(GlyphVertex { pos: Vec2::new(x1, y0), uv: Vec2::new(glyph.uv_max[0], glyph.uv_min[1]) });
-                vertices.push(GlyphVertex { pos: Vec2::new(x1, y1), uv: glyph.uv_max });
-                vertices.push(GlyphVertex { pos: Vec2::new(x0, y1), uv: Vec2::new(glyph.uv_min[0], glyph.uv_max[1]) });
+                vertices.push(GlyphVertex { pos: Vec2::new(x0, y0) / self.size as f32, uv: Vec2::new(glyph.uv_min[0], glyph.uv_max[1]) });
+                vertices.push(GlyphVertex { pos: Vec2::new(x1, y0) / self.size as f32, uv: Vec2::new(glyph.uv_max[0], glyph.uv_max[1]) });
+                vertices.push(GlyphVertex { pos: Vec2::new(x1, y1) / self.size as f32, uv: Vec2::new(glyph.uv_max[0], glyph.uv_min[1]) });
+                vertices.push(GlyphVertex { pos: Vec2::new(x0, y1) / self.size as f32, uv: Vec2::new(glyph.uv_min[0], glyph.uv_min[1]) });
+
+                log::info!("Char '{}' at ({:.1}, {:.1}) size ({:.1}x{:.1}) UVs ({:.3}, {:.3})-({:.3}, {:.3})", 
+                    c, x0, y0, glyph.size[0], glyph.size[1], 
+                    glyph.uv_min[0], glyph.uv_min[1], 
+                    glyph.uv_max[0], glyph.uv_max[1],
+                );
 
                 indices.extend_from_slice(&[
                     idx_offset, idx_offset+1, idx_offset+2,

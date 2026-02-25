@@ -1333,6 +1333,7 @@ name = "kvantuma"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "log",
  "pretty_env_logger",
  "xastge",
 ]

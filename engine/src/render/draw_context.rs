@@ -1,3 +1,5 @@
+use wgpu::Color;
+
 use super::*;
 use super::pass::*;
 
@@ -13,6 +15,7 @@ impl DrawContext {
         &'a mut self,
         canvases: &'a [&'a dyn RenderSurface],
         depth_texture: &'a Texture,
+        ops: Operations<Color>,
     ) -> RenderPass<'a> {
         let pass = self.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render pass"),
@@ -22,10 +25,7 @@ impl DrawContext {
                     Some(wgpu::RenderPassColorAttachment {
                         view: canvas.view(),
                         resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                            store: wgpu::StoreOp::Store,
-                        },
+                        ops,
                         depth_slice: None,
                     })
                 })
