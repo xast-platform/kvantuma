@@ -1,14 +1,15 @@
 use std::{alloc::{Layout, alloc, realloc, dealloc}, ptr::NonNull};
 // dense vec used for column lookup; no external map needed
 
-use crate::ecs::component::{Component, ComponentId, ComponentKind, ErasedComponent};
+use crate::ecs::{component::{Component, ComponentId, ComponentKind, ErasedComponent}, world::ComponentWrite};
 
 use super::component::ComponentMeta;
 
 pub const MAX_COMPONENTS: usize = 256;
 pub const WORDS: usize = MAX_COMPONENTS / u64::BITS as usize;
 
-pub type EntityId = u32;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct EntityId(pub(super) u32);
 
 #[derive(Clone)]
 pub struct ArchetypeMask {
@@ -219,7 +220,7 @@ impl Archetype {
         self.column_map[id]
     }
     
-    pub fn entities(&self) -> &[u32] {
+    pub fn entities(&self) -> &[EntityId] {
         &self.entities
     }
 
@@ -231,7 +232,57 @@ impl Archetype {
         &mut self.columns
     }
 
-    pub(super) fn add_entity(&mut self, id: EntityId) {
+    pub unsafe fn apply_write(&mut self, write: &ComponentWrite, row: usize) {
+        let col_idx = match self.column_map.get(write.component_id.0 as usize).copied().flatten() {
+            Some(idx) => idx,
+            None => panic!("Component {} not found in archetype", write.component_id.0),
+        };
+
+        let column = &mut self.columns[col_idx];
+
+        if row >= column.capacity {
+            panic!("Row {} out of capacity {}", row, column.capacity);
+        }
+
+        match column.meta.kind {
+            ComponentKind::Pod => {
+                let dest_ptr = unsafe {
+                    column.ptr.as_ptr().add(row * column.meta.layout.size())
+                };
+                assert_eq!(write.bytes.len(), column.meta.layout.size());
+                unsafe {
+                    std::ptr::copy_nonoverlapping(write.bytes.as_ptr(), dest_ptr, write.bytes.len());
+                }
+            }
+            ComponentKind::Extern => {
+                assert_eq!(write.bytes.len(), std::mem::size_of::<usize>());
+                let mut ptr_bytes = [0u8; std::mem::size_of::<usize>()];
+                ptr_bytes.copy_from_slice(&write.bytes[..]);
+                let boxed_ptr = usize::from_ne_bytes(ptr_bytes) as *mut u8;
+
+                if row < column.len {
+                    if let Some(drop_fn) = column.meta.drop_fn {
+                        unsafe {
+                            drop_fn(column.ptr.as_ptr().add(row * column.meta.layout.size()));
+                        }
+                    }
+                }
+
+                unsafe {
+                    let dest_ptr = column.ptr.as_ptr().add(row * column.meta.layout.size());
+                    std::ptr::write(dest_ptr as *mut *mut u8, boxed_ptr);
+                }
+            }
+        }
+
+        if row >= column.len {
+            column.len = row + 1;
+        }
+    }
+
+    pub(super) fn add_entity(&mut self, id: EntityId) -> usize {
+        let row = self.entities.len();
         self.entities.push(id);
+        row
     }
 }

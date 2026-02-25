@@ -6,7 +6,7 @@ use xastge::{
         window::{WindowDescriptor, WindowEvent, WindowMode},
     }, 
     component, 
-    ecs::world::World, 
+    ecs::world::{ComponentWrite, World}, 
     glam::{Quat, Vec2, Vec3}, 
     render::{
         Drawable, RenderDevice, RenderSurface, buffer::BufferHandle, error::RenderError, include_wgsl, material::{Material, TintedTextureMaterial}, mesh::{Mesh, Vertex}, pass::DrawDescriptor, registry::RenderRegistry, shader_resource::{ShaderResource, ShaderResourceLayout}, texture::{TextureHandle, TextureResourceDescriptor, TextureResourceUsage}, types::*
@@ -88,6 +88,7 @@ impl Default for Triangle {
 
 struct KvantumaGame {
     registry: RenderRegistry,
+    write_batch: Vec<ComponentWrite>,
 }
 
 #[derive(Clone)]
@@ -193,10 +194,24 @@ impl Game for KvantumaGame {
         world.spawn((mesh2, text_material, transform2));
         world.spawn((mdl, material, transform_monkey));
 
+        world.spawn((true, 0));
+
         Ok(())
     }
 
-    fn update(&mut self, _world: &mut World) -> anyhow::Result<()> {
+    fn update(&mut self, world: &mut World) -> anyhow::Result<()> {
+        world.for_each::<(&i32, &bool), _>(|e, (i, b)| {
+            log::info!("Bool: {}, Int: {}", b, i);
+            self.write_batch.push(ComponentWrite::new(e, i + 1));
+            self.write_batch.push(ComponentWrite::new(e, !b));
+        });
+
+        for w in &self.write_batch {
+            world.apply(w);
+        }
+
+        self.write_batch.clear();
+
         Ok(())
     }
 
@@ -218,7 +233,7 @@ impl Game for KvantumaGame {
                     store: StoreOp::Store,
                 }
             );
-            world.for_each::<(&Mesh<Vertex>, &TintedTextureMaterial, &Transform), _>(|(mesh, material, tr)| {
+            world.for_each::<(&Mesh<Vertex>, &TintedTextureMaterial, &Transform), _>(|_,(mesh, material, tr)| {
                 render_pass.draw(render_device, &self.registry, DrawDescriptor::<_, _> {
                     drawable: Some(mesh),
                     instance_data: Some(tr),
@@ -267,6 +282,7 @@ fn main() -> anyhow::Result<()> {
         }, 
         KvantumaGame {
             registry: RenderRegistry::new(),
+            write_batch: Vec::new(),
         },
     )?.run();
 

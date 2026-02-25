@@ -9,7 +9,10 @@ use super::component::*;
 component! { EXTERN: TintedTextureMaterial }
 component! { EXTERN: TaffyTree }
 
-impl<V: Pod + 'static> Component for Mesh<V> {
+component! { POD: bool }
+component! { POD: i32 }
+
+unsafe impl<V: Pod + 'static> Component for Mesh<V> {
     fn component_id() -> ComponentId {
         component_id::<Self>()
     }

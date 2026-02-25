@@ -1,5 +1,4 @@
-use bytemuck::{Pod, Zeroable};
-use glam::{Vec2, Vec3};
+use glam::Vec3;
 use image::ImageError;
 use wgpu::include_wgsl;
 

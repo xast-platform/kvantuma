@@ -40,7 +40,7 @@ pub struct ErasedComponent {
 #[macro_export]
 macro_rules! component {
     {POD: $name:ident} => {
-        impl $crate::ecs::component::Component for $name {
+        unsafe impl $crate::ecs::component::Component for $name {
             fn component_id() -> $crate::ecs::component::ComponentId {
                 $crate::ecs::component::component_id::<$name>()
             }
@@ -60,7 +60,7 @@ macro_rules! component {
     };
 
     {EXTERN: $name:ident} => {
-        impl $crate::ecs::component::Component for $name {
+        unsafe impl $crate::ecs::component::Component for $name {
             fn component_id() -> $crate::ecs::component::ComponentId {
                 $crate::ecs::component::component_id::<$name>()
             }
@@ -80,7 +80,7 @@ macro_rules! component {
     };
 }
 
-pub trait Component {
+pub unsafe trait Component {
     fn component_id() -> ComponentId where Self: Sized;
     fn id(&self) -> ComponentId;
     fn layout(&self) -> Layout;

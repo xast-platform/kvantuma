@@ -5,6 +5,7 @@ use super::component::*;
 pub struct World {
     archetypes: Vec<Archetype>,
     next_entity: EntityId,
+    entity_to_archetype: Vec<Option<(usize, usize)>>,
 }
 
 impl World {
@@ -15,6 +16,8 @@ impl World {
 
 impl World {
     pub fn spawn(&mut self, components: impl ComponentsBundle) -> EntityId {
+        let entity_id = self.next_entity;
+        self.next_entity.0 += 1;
         let mut ids = vec![];
 
         components.for_each(&mut |comp| {
@@ -24,10 +27,11 @@ impl World {
 
         ids.sort();
 
-        if let Some(archetype) = self
+        if let Some((idx, archetype)) = self
             .archetypes
             .iter_mut()
-            .find(|a| a.has_components(&ids)) 
+            .enumerate()
+            .find(|(_, a)| a.has_components(&ids)) 
         {
             components.for_each(&mut |comp| {
                 let id = comp.id();
@@ -38,11 +42,9 @@ impl World {
                 col.push(comp);
             });
 
-            let id = self.next_entity;
-            archetype.add_entity(id);
-            self.next_entity += 1;
-            
-            id
+            let row = archetype.add_entity(entity_id);
+            self.ensure_entity_map_capacity(entity_id);
+            self.entity_to_archetype[entity_id.0 as usize] = Some((idx, row));
         } else {
             let mask = ArchetypeMask::from_ids(&ids);
             let mut columns = vec![];
@@ -54,16 +56,21 @@ impl World {
 
             let mut archetype = Archetype::new(mask, columns);
 
-            let id = self.next_entity;
-            archetype.add_entity(id);
+            let row = archetype.add_entity(entity_id);
+            let idx = self.archetypes.len();
+
             self.archetypes.push(archetype);
-            self.next_entity += 1;
-            
-            id
+            self.ensure_entity_map_capacity(entity_id);
+            self.entity_to_archetype[entity_id.0 as usize] = Some((idx, row));
         }
+
+        entity_id
     }
 
     pub fn spawn_erased(&mut self, components: &[ErasedComponent]) -> EntityId {
+        let entity_id = self.next_entity;
+        self.next_entity.0 += 1;
+
         let mut ids = components
             .iter()
             .map(|comp| comp.id)
@@ -71,10 +78,11 @@ impl World {
 
         ids.sort();
 
-        if let Some(archetype) = self
+        if let Some((idx, archetype)) = self
             .archetypes
             .iter_mut()
-            .find(|a| a.has_components(&ids)) 
+            .enumerate()
+            .find(|(_, a)| a.has_components(&ids)) 
         {
             components.iter().for_each(|comp| {
                 let id = comp.id;
@@ -84,12 +92,10 @@ impl World {
 
                 col.push_erased(comp);
             });
+            let row = archetype.add_entity(entity_id);
 
-            let id = self.next_entity;
-            archetype.add_entity(id);
-            self.next_entity += 1;
-            
-            id
+            self.ensure_entity_map_capacity(entity_id);
+            self.entity_to_archetype[entity_id.0 as usize] = Some((idx, row));            
         } else {
             let mask = ArchetypeMask::from_ids(&ids);
             let mut columns = vec![];
@@ -101,12 +107,29 @@ impl World {
 
             let mut archetype = Archetype::new(mask, columns);
 
-            let id = self.next_entity;
-            archetype.add_entity(id);
-            self.archetypes.push(archetype);
-            self.next_entity += 1;
+            let row = archetype.add_entity(entity_id);
+            let idx = self.archetypes.len();
             
-            id
+            self.archetypes.push(archetype);
+            self.ensure_entity_map_capacity(entity_id);
+            self.entity_to_archetype[entity_id.0 as usize] = Some((idx, row));  
+        }
+
+        entity_id
+    }
+
+    pub fn apply(&mut self, write: &ComponentWrite) {
+        let (arch_idx, row) = self.entity_to_archetype[write.entity.0 as usize]
+            .expect("Entity does not exist");
+        unsafe {
+            self.archetypes[arch_idx].apply_write(write, row);
+        }
+    }
+
+    fn ensure_entity_map_capacity(&mut self, entity: EntityId) {
+        if self.entity_to_archetype.len() <= entity.0 as usize {
+            self.entity_to_archetype
+                .resize(entity.0 as usize + 1, None);
         }
     }
 }
@@ -153,71 +176,69 @@ impl World {
         }
     }
 
-    pub fn query_erased_mut<F>(&mut self, components: &[(ComponentId, Access)], mut f: F)
-    where
-        F: FnMut(EntityId, &[(*mut u8, usize, Access)]),
-    {
-        let ids = components
-            .iter()
-            .map(|(id, _)| *id)
-            .collect::<Vec<_>>();
-
-        for archetype in &mut self.archetypes {
-            if !archetype.has_components(&ids) { continue }
-
-            let len = archetype.entities().len();
-            let column_indices: Vec<(usize, Access)> = components
-                .iter()
-                .map(|(id, access)| (
-                    archetype.column_index(*id).unwrap(),
-                    *access
-                ))
-                .collect();
-
-            let base_ptr = archetype.columns_mut().as_mut_ptr();
-            let mut ptrs: Vec<(*mut u8, usize, Access)> = Vec::with_capacity(components.len());
-
-            for i in 0..len {
-                ptrs.clear();
-                for (idx, access) in &column_indices {
-                    unsafe {
-                        let col_ptr = base_ptr.add(*idx);
-                        let layout_size = (*col_ptr).component_meta().layout.size();
-                        let data_ptr = (*col_ptr).as_ptr_mut().add(i * layout_size);
-                        ptrs.push((data_ptr, layout_size, *access));
-                    }
-                }
-
-                f(archetype.entities()[i], ptrs.as_slice());
-            }
-        }
-    }
-
-    pub fn for_each_mut<'w, Q: QueryMut<'w>, F>(&'w mut self, f: F)
-    where
-        F: FnMut(Q::Result),
-    {
-        Q::for_each_world_mut(self, f)
-    }
-
-    pub fn query_mut<'w, Q: QueryMut<'w>>(&'w mut self) -> Vec<Q::Result> {
-        let mut out = Vec::new();
-        self.for_each_mut::<Q, _>(|r| out.push(r));
-        out
-    }
-
     pub fn for_each<'w, Q: Query<'w>, F>(&'w self, f: F)
     where
-        F: FnMut(Q::Result),
+        F: FnMut(EntityId, Q::Result),
     {
         Q::for_each_world(self, f)
     }
+}
 
-    pub fn query<'w, Q: Query<'w>>(&'w self) -> Vec<Q::Result> {
-        let mut out = Vec::new();
-        self.for_each::<Q, _>(|r| out.push(r));
-        out
+pub struct ComponentWrite {
+    pub entity: EntityId,
+    pub component_id: ComponentId,
+    pub bytes: Vec<u8>,
+    pub drop_fn: Option<unsafe fn(*mut u8)>,
+}
+
+impl ComponentWrite {
+    pub fn new<T: Component>(entity: EntityId, component: T) -> ComponentWrite {
+        match component.kind() {
+            ComponentKind::Pod => {
+                let bytes = unsafe { pod_to_bytes(&component) };
+                ComponentWrite {
+                    entity,
+                    component_id: T::component_id(),
+                    bytes,
+                    drop_fn: None,
+                }
+            }
+            ComponentKind::Extern => {
+                let drop_fn = component.drop_fn();
+                let boxed = Box::new(component);
+                let ptr = Box::into_raw(boxed) as *mut u8;
+                let bytes = (ptr as usize).to_ne_bytes().to_vec();
+
+                ComponentWrite {
+                    entity,
+                    component_id: T::component_id(),
+                    bytes,
+                    drop_fn,
+                }
+            }
+        }
     }
+}
+
+use std::{mem, ptr};
+
+unsafe fn pod_to_bytes<T>(component: &T) -> Vec<u8> {
+    let size = mem::size_of::<T>();
+    let mut bytes = Vec::with_capacity(size);
+
+    unsafe {
+        // Set length so Vec can be written into
+        bytes.set_len(size);
+
+        // Copy the bytes of the component into the Vec
+        ptr::copy_nonoverlapping(
+            component as *const T as *const u8,
+            bytes.as_mut_ptr(),
+            size,
+        );
+    }
+
+    bytes
 }
 
 pub trait Query<'w> {
@@ -225,13 +246,5 @@ pub trait Query<'w> {
 
     fn for_each_world<F>(world: &'w World, f: F)
     where
-        F: FnMut(Self::Result);
-}
-
-pub trait QueryMut<'w> {
-    type Result: 'w;
-
-    fn for_each_world_mut<F>(world: &'w mut World, f: F)
-    where
-        F: FnMut(Self::Result);
+        F: FnMut(EntityId, Self::Result);
 }

@@ -15,7 +15,8 @@ component! { POD: Position }
 
 use criterion::{black_box, Criterion};
 use hecs::World as HecsWorld;
-use kvantuma::{component, ecs::world::World};
+use xastge::{component, ecs::world::World};
+use xastge::ecs::world::ComponentWrite;
 
 fn bench_hecs_spawn(c: &mut Criterion) {
     c.bench_function("hecs spawn", |b| {
@@ -44,7 +45,7 @@ fn bench_hecs_query(c: &mut Criterion) {
 }
 
 fn bench_kvantuma_spawn(c: &mut Criterion) {
-    c.bench_function("kvantuma ecs spawn", |b| {
+    c.bench_function("xengine ecs spawn", |b| {
         b.iter(|| {
             let mut world = World::new();
             for _ in 0..100_000 {
@@ -59,12 +60,22 @@ fn bench_kvantuma_query(c: &mut Criterion) {
     for _ in 0..100_000 {
         world.spawn((Position { x: 0.0, y: 0.0 }, Velocity { x: 1.0, y: 1.0 }));
     }
-    c.bench_function("kvantuma ecs query", |b| {
+    let mut batch = Vec::<ComponentWrite>::with_capacity(100_000);
+
+    c.bench_function("xengine ecs query", |b| {
         b.iter(|| {
-            world.for_each::<(&mut Position, &Velocity), _>(|(pos, vel)| {
-                pos.x = black_box(pos.x + vel.x);
-                pos.y = black_box(pos.y + vel.y);
+            world.for_each::<(&Position, &Velocity), _>(|e, (pos, vel)| {
+                batch.push(black_box(ComponentWrite::new(e, Position {
+                    x: pos.x + vel.x,
+                    y: pos.y + vel.y,
+                })));
             });
+
+            for w in &batch {
+                world.apply(w);
+            }
+
+            batch.clear();
         });
     });
 }
