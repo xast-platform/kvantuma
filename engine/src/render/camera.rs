@@ -2,10 +2,10 @@ use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Vec3};
 use crate::Transform;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq,)]
 pub enum CameraType {
-    LookAt,
-    FirstPerson,
+    LookAt          = 0,
+    FirstPerson     = 1,
 }
 
 #[derive(Clone, Debug, PartialEq)]

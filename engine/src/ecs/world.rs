@@ -121,7 +121,39 @@ pub const READ: Access = Access::Read;
 pub const WRITE: Access = Access::Write;
 
 impl World {
-    pub fn query_erased_for_each<F>(&mut self, components: &[(ComponentId, Access)], mut f: F)
+    pub fn query_erased<F>(&self, ids: &[ComponentId], mut f: F)
+    where
+        F: FnMut(EntityId, &[(*const u8, usize)]),
+    {
+        for archetype in &self.archetypes {
+            if !archetype.has_components(&ids) { continue }
+
+            let len = archetype.entities().len();
+            let column_indices: Vec<usize> = ids
+                .iter()
+                .map(|id| archetype.column_index(*id).unwrap())
+                .collect();
+
+            let base_ptr = archetype.columns().as_ptr();
+            let mut ptrs: Vec<(*const u8, usize)> = Vec::with_capacity(ids.len());
+
+            for i in 0..len {
+                ptrs.clear();
+                for idx in &column_indices {
+                    unsafe {
+                        let col_ptr = base_ptr.add(*idx);
+                        let layout_size = (*col_ptr).component_meta().layout.size();
+                        let data_ptr = (*col_ptr).as_ptr().add(i * layout_size);
+                        ptrs.push((data_ptr, layout_size));
+                    }
+                }
+
+                f(archetype.entities()[i], ptrs.as_slice());
+            }
+        }
+    }
+
+    pub fn query_erased_mut<F>(&mut self, components: &[(ComponentId, Access)], mut f: F)
     where
         F: FnMut(EntityId, &[(*mut u8, usize, Access)]),
     {
@@ -151,7 +183,7 @@ impl World {
                     unsafe {
                         let col_ptr = base_ptr.add(*idx);
                         let layout_size = (*col_ptr).component_meta().layout.size();
-                        let data_ptr = (*col_ptr).as_ptr().add(i * layout_size);
+                        let data_ptr = (*col_ptr).as_ptr_mut().add(i * layout_size);
                         ptrs.push((data_ptr, layout_size, *access));
                     }
                 }
@@ -161,14 +193,27 @@ impl World {
         }
     }
 
-    pub fn for_each<'w, Q: Query<'w>, F>(&'w mut self, f: F)
+    pub fn for_each_mut<'w, Q: QueryMut<'w>, F>(&'w mut self, f: F)
+    where
+        F: FnMut(Q::Result),
+    {
+        Q::for_each_world_mut(self, f)
+    }
+
+    pub fn query_mut<'w, Q: QueryMut<'w>>(&'w mut self) -> Vec<Q::Result> {
+        let mut out = Vec::new();
+        self.for_each_mut::<Q, _>(|r| out.push(r));
+        out
+    }
+
+    pub fn for_each<'w, Q: Query<'w>, F>(&'w self, f: F)
     where
         F: FnMut(Q::Result),
     {
         Q::for_each_world(self, f)
     }
 
-    pub fn query<'w, Q: Query<'w>>(&'w mut self) -> Vec<Q::Result> {
+    pub fn query<'w, Q: Query<'w>>(&'w self) -> Vec<Q::Result> {
         let mut out = Vec::new();
         self.for_each::<Q, _>(|r| out.push(r));
         out
@@ -178,7 +223,15 @@ impl World {
 pub trait Query<'w> {
     type Result: 'w;
 
-    fn for_each_world<F>(world: &'w mut World, f: F)
+    fn for_each_world<F>(world: &'w World, f: F)
+    where
+        F: FnMut(Self::Result);
+}
+
+pub trait QueryMut<'w> {
+    type Result: 'w;
+
+    fn for_each_world_mut<F>(world: &'w mut World, f: F)
     where
         F: FnMut(Self::Result);
 }

@@ -136,7 +136,11 @@ impl Column {
         &self.meta
     }
 
-    pub fn as_ptr(&mut self) -> *mut u8 {
+    pub fn as_ptr(&self) -> *const u8 {
+        self.ptr.as_ptr()
+    }
+
+    pub fn as_ptr_mut(&mut self) -> *mut u8 {
         self.ptr.as_ptr()
     }
 }
