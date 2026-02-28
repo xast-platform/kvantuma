@@ -41,6 +41,7 @@ impl RenderRegistry {
                     label: &pretty_type_name::pretty_type_name::<M>(),
                     vertex_layout: M::vertex_layout(),
                     surface_formats: &[render_device.surface_format()],
+                    blend_state: M::blend_state(),
                 })
             );
     }

@@ -33,6 +33,7 @@ pub struct RenderPipelineDescriptor<'a> {
     /// The surface formats used in the pipeline. Count and formats must
     /// match ones in render pass
     pub surface_formats: &'a [wgpu::TextureFormat],
+    pub blend_state: BlendState,
 }
 
 /// Descriptor for creating a compute pipeline.
@@ -87,7 +88,7 @@ impl Pipeline {
                     .iter()
                     .map(|format| Some(wgpu::ColorTargetState {
                         format: *format,
-                        blend: Some(wgpu::BlendState::REPLACE),
+                        blend: Some(descriptor.blend_state),
                         write_mask: wgpu::ColorWrites::ALL,
                     }))
                     .collect::<Vec<_>>(),

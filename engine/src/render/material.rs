@@ -22,6 +22,10 @@ pub trait Material {
         render_device: &RenderDevice,
         registry: &RenderRegistry,
     ) -> ShaderResource;
+
+    fn blend_state() -> BlendState {
+        BlendState::ALPHA_BLENDING
+    }
 }
 
 #[derive(Debug)]

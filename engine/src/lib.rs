@@ -1,12 +1,9 @@
 pub mod app;
-pub mod ecs;
 pub mod render;
 pub mod physics;
 pub mod ui;
 pub mod error;
 pub mod utils;
-
-pub use glam;
 
 use crate::render::InstanceData;
 
@@ -25,8 +22,6 @@ impl Default for Transform {
         }
     }
 }
-
-component! { POD: Transform }
 
 impl Transform {
     pub fn to_matrix(&self) -> glam::Mat4 {

@@ -5,11 +5,8 @@ use xastge::{
         App, Game,
         window::{WindowDescriptor, WindowEvent, WindowMode},
     }, 
-    component, 
-    ecs::world::{ComponentWrite, World}, 
-    glam::{Quat, Vec2, Vec3}, 
     render::{
-        Drawable, RenderDevice, RenderSurface, buffer::BufferHandle, error::RenderError, include_wgsl, material::{Material, TintedTextureMaterial}, mesh::{Mesh, Vertex}, pass::DrawDescriptor, registry::RenderRegistry, shader_resource::{ShaderResource, ShaderResourceLayout}, texture::{TextureHandle, TextureResourceDescriptor, TextureResourceUsage}, types::*
+        Drawable, RenderDevice, RenderSurface, error::RenderError, include_wgsl, material::{Material, TintedTextureMaterial}, mesh::{Mesh, Vertex}, pass::DrawDescriptor, registry::RenderRegistry, shader_resource::{ShaderResource, ShaderResourceLayout}, texture::{TextureHandle, TextureResourceDescriptor, TextureResourceUsage}, types::*
     }, 
     ui::{
         atlas::GlyphVertex, 
@@ -17,78 +14,11 @@ use xastge::{
     }
 };
 
-#[derive(Debug)]
-pub struct Triangle {
-    pub vertex_data: [Vertex; 3],
-    pub vertex_buffer: Option<BufferHandle>,
-}
-
-component! { EXTERN: Triangle }
-
-impl Drawable for Triangle {
-    fn update(
-        &mut self, 
-        render_device: &mut RenderDevice,
-        registry: &mut RenderRegistry,
-    ) {
-        if self.vertex_buffer.is_none() {
-            self.vertex_buffer = Some(
-                registry.new_buffer::<Vertex>(render_device, 3, BufferUsages::VERTEX)
-            );
-        }
-
-        let Some(handle) = self.vertex_buffer else { unreachable!() };
-        
-        registry
-            .get_buffer(handle) 
-            .expect("Cannot call update() on Triangle")
-            .fill_exact(render_device, 0, &self.vertex_data)
-            .unwrap();
-    }
-    
-
-    fn vertex_buffer(&self) -> BufferHandle {
-        self.vertex_buffer
-            .expect("Triangle is not set up with update()")
-    }
-
-    fn index_buffer(&self) -> Option<BufferHandle> {
-        None
-    }
-
-    fn indices(&self) -> u32 {
-        0
-    }
-}
-
-impl Default for Triangle {
-    fn default() -> Self {
-        Self {
-            vertex_data: [
-                Vertex {
-                    position: Vec3::new(0.0, 0.5, 0.0),
-                    normal: Vec3::new(0.0, 0.0, 1.0),
-                    texcoord: Vec2::new(0.5, 0.0),
-                },
-                Vertex {
-                    position: Vec3::new(-0.5, -0.5, 0.0),
-                    normal: Vec3::new(0.0, 0.0, 1.0),
-                    texcoord: Vec2::new(0.0, 1.0),
-                },
-                Vertex {
-                    position: Vec3::new(0.5, -0.5, 0.0),
-                    normal: Vec3::new(0.0, 0.0, 1.0),
-                    texcoord: Vec2::new(1.0, 1.0),
-                },
-            ],
-            vertex_buffer: None,
-        }
-    }
-}
+use glam::{Quat, Vec2, Vec3};
+use hecs::{World};
 
 struct KvantumaGame {
     registry: RenderRegistry,
-    write_batch: Vec<ComponentWrite>,
 }
 
 #[derive(Clone)]
@@ -134,8 +64,6 @@ impl Material for TextMaterial {
             )
     }
 }
-
-component! { EXTERN: TextMaterial }
 
 impl Game for KvantumaGame {
     fn init(&mut self, world: &mut World, render_device: &mut RenderDevice) -> anyhow::Result<()> {
@@ -199,19 +127,7 @@ impl Game for KvantumaGame {
         Ok(())
     }
 
-    fn update(&mut self, world: &mut World) -> anyhow::Result<()> {
-        world.for_each::<(&i32, &bool), _>(|e, (i, b)| {
-            log::info!("Bool: {}, Int: {}", b, i);
-            self.write_batch.push(ComponentWrite::new(e, i + 1));
-            self.write_batch.push(ComponentWrite::new(e, !b));
-        });
-
-        for w in &self.write_batch {
-            world.apply(w);
-        }
-
-        self.write_batch.clear();
-
+    fn update(&mut self, _world: &mut World) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -225,41 +141,42 @@ impl Game for KvantumaGame {
         let mut ctx = render_device.draw_ctx();
 
         {
-            let mut render_pass = ctx.render_pass(
-                canvases, 
-                render_device.depth_texture(),
-                Operations {
-                    load: LoadOp::Clear(Color::BLACK),
-                    store: StoreOp::Store,
-                }
-            );
-            world.for_each::<(&Mesh<Vertex>, &TintedTextureMaterial, &Transform), _>(|_,(mesh, material, tr)| {
+            for (_, (mesh, material, tr)) in &mut world.query::<(&Mesh<Vertex>, &TintedTextureMaterial, &Transform)>() {
+                let mut render_pass = ctx.render_pass(
+                    canvases, 
+                    render_device.depth_texture(),
+                    Operations {
+                        load: LoadOp::Clear(Color::BLACK),
+                        store: StoreOp::Store,
+                    }
+                );
+                
                 render_pass.draw(render_device, &self.registry, DrawDescriptor::<_, _> {
                     drawable: Some(mesh),
                     instance_data: Some(tr),
                     material,
                 });
-            });
+            }
         }
 
         // ----------- UI render pass -----------
-        // {
-        //     let mut render_pass = ctx.render_pass(
-        //         canvases, 
-        //         render_device.depth_texture(),
-        //         Operations {
-        //             load: LoadOp::Load,
-        //             store: StoreOp::Store,
-        //         },
-        //     );
-        //     world.for_each::<(&Mesh<GlyphVertex>, &TextMaterial, &Transform), _>(|(mesh, mat, t)| {
-        //         render_pass.draw(render_device, &self.registry, DrawDescriptor::<_, _> {
-        //             drawable: Some(mesh),
-        //             instance_data: Some(t),
-        //             material: mat,
-        //         });
-        //     });
-        // }
+        {
+            for (_, (mesh, mat, t)) in &mut world.query::<(&Mesh<GlyphVertex>, &TextMaterial, &Transform)>() {
+                let mut render_pass = ctx.render_pass(
+                    canvases, 
+                    render_device.depth_texture(),
+                    Operations {
+                        load: LoadOp::Load,
+                        store: StoreOp::Store,
+                    },
+                );
+                render_pass.draw(render_device, &self.registry, DrawDescriptor::<_, _> {
+                    drawable: Some(mesh),
+                    instance_data: Some(t),
+                    material: mat,
+                });
+            }
+        }
 
         ctx.apply(canvas, render_device);
 
@@ -282,7 +199,6 @@ fn main() -> anyhow::Result<()> {
         }, 
         KvantumaGame {
             registry: RenderRegistry::new(),
-            write_batch: Vec::new(),
         },
     )?.run();
 

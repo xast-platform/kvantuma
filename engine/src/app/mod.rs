@@ -1,7 +1,8 @@
 use glam::UVec2;
 use glfw::{Glfw, PWindow, WindowEvent};
+use hecs::World;
 
-use crate::{app::{helper::{GameLoopCallbacks, game_loop}, window::{Events, WindowDescriptor, WindowMode}}, ecs::world::World, error::GameError, render::{RenderDevice, error::RenderError}};
+use crate::{app::{helper::{GameLoopCallbacks, game_loop}, window::{Events, WindowDescriptor, WindowMode}}, error::GameError, render::{RenderDevice, error::RenderError}};
 
 pub mod base;
 pub mod helper;

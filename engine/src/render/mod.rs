@@ -37,6 +37,7 @@ pub mod types {
         LoadOp,
         StoreOp,
         Color,
+        BlendState,
     };
 }
 
