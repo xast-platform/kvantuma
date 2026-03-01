@@ -97,14 +97,10 @@ impl Game for KvantumaGame {
             atlas: atlas.texture(),
         };
 
-        atlas.image().save("atlas.png")?;
-
-        // panic!();
-
-        let text1 = "the quick brown fox jumps over the lazy dog!";
-        let mut mesh1 = atlas.generate_mesh(text1, Vec2::ZERO);
+        let text1 = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur et sapien urna. Aliquam non quam purus. Nunc imperdiet tincidunt maximus. Vestibulum elementum tortor eu urna vehicula bibendum. Aliquam elementum risus sed purus varius ultrices. Praesent eget libero interdum, facilisis lorem eget, tempor ligula. Etiam viverra volutpat magna, quis tincidunt arcu pharetra et. Mauris orci ex, fermentum in sem in, varius porta est. Phasellus id metus lobortis, vehicula erat non, lacinia nibh. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. ";
+        let mut mesh1 = atlas.generate_mesh(text1, Vec2::ZERO, 5.0);
         let transform1 = Transform {
-            translation: Vec3::new(-0.5, 0.0, 0.0),
+            translation: Vec3::new(-1.5, 0.0, 0.0),
             scale: Vec3::ONE,
             rotation: Quat::IDENTITY,
         };

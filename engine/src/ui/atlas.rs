@@ -8,7 +8,7 @@ use slotmap::new_key_type;
 use crate::render::{mesh::Mesh, texture::TextureHandle};
 
 pub const PADDING: u32 = 2;
-pub const CHARSET: &str = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,;:!()";
+pub const CHARSET: &str = " ^ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,;:!()";
 // TODO: implement other glyphs in the font
 // pub const CHARSET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,;:!?()АБВГҐДЕЄЖЗИІЇЙКЛМНОПРСТУФХЦЧШЩЬЮЯабвгґдеєжзиіїйклмнопрстуфхцчшщьюя0123456789 ";
 
@@ -168,13 +168,6 @@ pub fn layout<F, SF>(
     let mut caret = position + point(0.0, font.ascent());
     let mut last_glyph: Option<Glyph> = None;
     for c in text.chars() {
-        if c.is_control() {
-            if c == '\n' {
-                caret = point(position.x, caret.y + v_advance);
-                last_glyph = None;
-            }
-            continue;
-        }
         let mut glyph = font.scaled_glyph(c);
         if let Some(previous) = last_glyph.take() {
             caret.x += font.kern(previous.id, glyph.id);
@@ -182,13 +175,13 @@ pub fn layout<F, SF>(
         glyph.position = caret;
 
         last_glyph = Some(glyph.clone());
-        caret.x += font.h_advance(glyph.id);
+        caret.x += font.h_advance(glyph.id) + PADDING as f32;
 
         if !c.is_whitespace() && caret.x > position.x + atlas_size {
             caret = point(position.x, caret.y + v_advance);
             glyph.position = caret;
             last_glyph = None;
-            caret.x += font.h_advance(glyph.id);
+            caret.x += font.h_advance(glyph.id) + PADDING as f32;
             line += 1;
         }
         
@@ -225,7 +218,7 @@ impl Atlas {
         &self.image
     }
 
-    pub fn generate_mesh(&self, text: &str, start: Vec2) -> Mesh<GlyphVertex> {
+    pub fn generate_mesh(&self, text: &str, start: Vec2, horizontal_spacing: f32) -> Mesh<GlyphVertex> {
         let mut vertices = Vec::with_capacity(text.len() * 4);
         let mut indices = Vec::with_capacity(text.len() * 6);
         let mut cursor_x = start[0];
@@ -255,7 +248,7 @@ impl Atlas {
                 ]);
                 idx_offset += 4;
 
-                cursor_x += glyph.advance;
+                cursor_x += glyph.advance + horizontal_spacing;
             }
         }
 
