@@ -126,13 +126,13 @@ impl<V: Pod> Drawable for Mesh<V> {
             .fill_exact(render_device, 0, &self.vertices)
             .unwrap();
 
-        let Some(ib) = self.index_buffer else { unreachable!() };
-        
-        registry
-            .get_buffer(ib) 
-            .expect("Cannot call update() on Mesh")
-            .fill_exact(render_device, 0, &self.indices)
-            .unwrap();
+        if let Some(ib) = self.index_buffer {
+            registry
+                .get_buffer(ib) 
+                .expect("Cannot call update() on Mesh")
+                .fill_exact(render_device, 0, &self.indices)
+                .unwrap();
+        }
     }
 
     fn vertex_buffer(&self) -> BufferHandle {

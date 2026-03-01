@@ -99,6 +99,8 @@ impl Game for KvantumaGame {
 
         atlas.image().save("atlas.png")?;
 
+        // panic!();
+
         let text1 = "the quick brown fox jumps over the lazy dog!";
         let mut mesh1 = atlas.generate_mesh(text1, Vec2::ZERO);
         let transform1 = Transform {
@@ -107,19 +109,19 @@ impl Game for KvantumaGame {
             rotation: Quat::IDENTITY,
         };
 
-        let text2 = "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG!";
-        let mut mesh2 = atlas.generate_mesh(text2, Vec2::ZERO);
-        let transform2 = Transform {
-            translation: Vec3::new(-0.7, 0.5, 0.0),
-            scale: Vec3::ONE,
-            rotation: Quat::IDENTITY,
-        };
+        // let text2 = "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG!";
+        // let mut mesh2 = atlas.generate_mesh(text2, Vec2::ZERO);
+        // let transform2 = Transform {
+        //     translation: Vec3::new(-0.7, 0.5, 0.0),
+        //     scale: Vec3::ONE,
+        //     rotation: Quat::IDENTITY,
+        // };
 
         mesh1.update(render_device, &mut self.registry);
-        mesh2.update(render_device, &mut self.registry);
+        // mesh2.update(render_device, &mut self.registry);
 
         world.spawn((mesh1, text_material.clone(), transform1));
-        world.spawn((mesh2, text_material, transform2));
+        // world.spawn((mesh2, text_material, transform2));
         world.spawn((mdl, material, transform_monkey));
 
         world.spawn((true, 0));
@@ -151,11 +153,11 @@ impl Game for KvantumaGame {
                     }
                 );
                 
-                render_pass.draw(render_device, &self.registry, DrawDescriptor::<_, _> {
-                    drawable: Some(mesh),
-                    instance_data: Some(tr),
-                    material,
-                });
+                // render_pass.draw(render_device, &self.registry, DrawDescriptor::<_, _> {
+                //     drawable: Some(mesh),
+                //     instance_data: Some(tr),
+                //     material,
+                // });
             }
         }
 
@@ -192,8 +194,8 @@ fn main() -> anyhow::Result<()> {
 
     App::new(
         WindowDescriptor {
-            width: 1280,
-            height: 720,
+            width: 1024,
+            height: 1024,
             title: "KVΛNTUMA",
             mode: WindowMode::Windowed,
         }, 

@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use ab_glyph::{Font, FontRef, Glyph, PxScale, point};
+use ab_glyph::{Font, FontRef, Glyph, Point, PxScale, ScaleFont, point};
 use bytemuck::{Pod, Zeroable};
 use glam::Vec2;
 use image::{GrayImage, Luma};
@@ -8,9 +8,9 @@ use slotmap::new_key_type;
 use crate::render::{mesh::Mesh, texture::TextureHandle};
 
 pub const PADDING: u32 = 2;
-pub const CHARSET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,;:!()";
+pub const CHARSET: &str = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,;:!()";
 // TODO: implement other glyphs in the font
-// pub const CHARSET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,;:!?()АБВГҐДЕЄЖЗИІЇЙКЛМНОПРСТУФХЦЧШЩЬЮЯабвгґдеєжзиіїйклмнопрстуфхцчшщьюя0123456789";
+// pub const CHARSET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,;:!?()АБВГҐДЕЄЖЗИІЇЙКЛМНОПРСТУФХЦЧШЩЬЮЯабвгґдеєжзиіїйклмнопрстуфхцчшщьюя0123456789 ";
 
 new_key_type! {
     pub struct FontHandle;
@@ -82,21 +82,12 @@ impl AtlasSet {
             log::error!("Invalid size {} for font atlas", font_size);
             return;
         };
+
         let scale = PxScale::from(font_size as f32);
+        let scaled_font = font.as_scaled(scale);
         
         let mut glyphs = vec![];
-        let mut caret = point(0.0, scale.x);
-        for c in CHARSET.chars() {
-            if let Some(glyph_id) = font.glyph_id(c).into() {
-                let glyph = Glyph {
-                    id: glyph_id,
-                    scale,
-                    position: caret,
-                };
-                caret.x += font.h_advance_unscaled(glyph.id) * scale.x;
-                glyphs.push((c, glyph));
-            }
-        }
+        layout(&scaled_font, point(0.0, 0.0), atlas_size as f32, CHARSET, &mut glyphs);
 
         let mut atlas = Atlas {
             image: GrayImage::new(atlas_size as u32, atlas_size as u32),
@@ -105,86 +96,53 @@ impl AtlasSet {
             glyphs: HashMap::new(),
         };
 
-        let mut cursor_x = 0;
-        let mut cursor_y = 0;
-        let mut row_height = 0;
+        for (c, line, g) in glyphs {
+            if let Some(og) = scaled_font.outline_glyph(g.clone()) {
+                let bounds = og.px_bounds();
+                    
+                og.draw(|x, y, v| {
+                    let x = x as f32 + bounds.min.x;
+                    let y = y as f32 + bounds.min.y;
+                    if x >= 0.0 && (x as usize) < atlas_size && y >= 0.0 && (y as usize) < atlas_size {
+                        atlas.image[(x as u32, y as u32)] = Luma([(v * 255.0) as u8]);
+                    }
+                });
 
-        for (c, glyph) in glyphs {
-            let id = glyph.id;
-            let outlined = font.outline_glyph(glyph).unwrap();
-            let bounds = outlined.px_bounds();
-            let w = bounds.width().ceil() as u32 + PADDING;
-            let h = bounds.height().ceil() as u32 + PADDING;
+                let uv_min = Vec2::new(
+                    bounds.min.x / atlas_size as f32, 
+                    bounds.min.y / atlas_size as f32,
+                );
 
-            if cursor_x + w > atlas_size as u32 {
-                cursor_x = 0;
-                cursor_y += row_height;
-                row_height = 0;
+                let uv_max = Vec2::new(
+                    (bounds.min.x + bounds.width()) / atlas_size as f32, 
+                    (bounds.min.y + bounds.height()) / atlas_size as f32,
+                );
+
+                let v_advance = scaled_font.height() + scaled_font.line_gap();
+                let offset = scaled_font.ascent() + line as f32 * v_advance;
+
+                atlas.glyphs.insert(c, GlyphInfo {
+                    uv_min,
+                    uv_max,
+                    size: Vec2::new(bounds.width(), bounds.height()),
+                    advance: scaled_font.h_advance(g.id),
+                    bearing: Vec2::new(bounds.min.x, bounds.min.y),
+                    offset,
+                });
+            } else {
+                if c == ' ' {
+                    atlas.glyphs.insert(c, GlyphInfo {
+                        uv_min: Vec2::ZERO,
+                        uv_max: Vec2::ZERO,
+                        size: Vec2::ZERO,
+                        advance: scaled_font.h_advance(g.id),
+                        bearing: Vec2::ZERO,
+                        offset: 0.0,
+                    });
+                } else {
+                    log::warn!("Failed to outline glyph `{c}`");
+                }
             }
-
-            let uv_min = Vec2::new(
-                cursor_x as f32 / atlas_size as f32, 
-                cursor_y as f32 / atlas_size as f32,
-            );
-
-            let uv_max = Vec2::new(
-                (cursor_x + w) as f32 / atlas_size as f32, 
-                (cursor_y + h) as f32 / atlas_size as f32,
-            );
-
-            atlas.glyphs.insert(c, GlyphInfo {
-                uv_min,
-                uv_max,
-                size: Vec2::new(w as f32, h as f32),
-                bearing: Vec2::new(bounds.min.x, bounds.min.y),
-                advance: font.h_advance_unscaled(id) / 1000.0 * scale.x,
-            });
-
-            // TODO: calculate this somehow for different fonts
-            const OFFSET: u32 = 25;
- 
-            outlined.draw(|x, y, v| {
-                let px = cursor_x + x;
-                let py = cursor_y + (bounds.min.y as i32 + y as i32) as u32 - OFFSET;
-                atlas.image[(px, py)] = Luma([(v * 255.0) as u8]);
-            });
-
-            // let min_x = cursor_x;
-            // let min_y = cursor_y;
-            // let max_x = cursor_x + w - 1;
-            // let max_y = cursor_y + h - 1;
-
-            // for x in min_x..=max_x {
-            //     if min_y < atlas.size {
-            //         atlas.image[(x, min_y)] = Luma([0]);
-            //         if x % 2 == 0 {
-            //             atlas.image[(x, min_y)] = Luma([255]);
-            //         }
-            //     }
-            //     if max_y < atlas.size {
-            //         atlas.image[(x, max_y)] = Luma([0]);
-            //         if x % 2 == 0 {
-            //             atlas.image[(x, max_y)] = Luma([255]);
-            //         }
-            //     }
-            // }
-            // for y in min_y..=max_y {
-            //     if min_x < atlas.size {
-            //         atlas.image[(min_x, y)] = Luma([0]);
-            //         if y % 2 == 0 {
-            //             atlas.image[(min_x, y)] = Luma([255]);
-            //         }
-            //     }
-            //     if max_x < atlas.size {
-            //         atlas.image[(max_x, y)] = Luma([0]);
-            //         if y % 2 == 0 {
-            //             atlas.image[(max_x, y)] = Luma([255]);
-            //         }
-            //     }
-            // }
-
-            cursor_x += w;
-            row_height = row_height.max(h);
         }
 
         self.map.insert(font_size, atlas);
@@ -195,12 +153,56 @@ impl AtlasSet {
     }
 }
 
+pub fn layout<F, SF>(
+    font: SF,
+    position: Point,
+    atlas_size: f32,
+    text: &str,
+    target: &mut Vec<(char, u32, Glyph)>,
+) where
+    F: Font,
+    SF: ScaleFont<F>,
+{
+    let mut line = 0;
+    let v_advance = font.height() + font.line_gap();
+    let mut caret = position + point(0.0, font.ascent());
+    let mut last_glyph: Option<Glyph> = None;
+    for c in text.chars() {
+        if c.is_control() {
+            if c == '\n' {
+                caret = point(position.x, caret.y + v_advance);
+                last_glyph = None;
+            }
+            continue;
+        }
+        let mut glyph = font.scaled_glyph(c);
+        if let Some(previous) = last_glyph.take() {
+            caret.x += font.kern(previous.id, glyph.id);
+        }
+        glyph.position = caret;
+
+        last_glyph = Some(glyph.clone());
+        caret.x += font.h_advance(glyph.id);
+
+        if !c.is_whitespace() && caret.x > position.x + atlas_size {
+            caret = point(position.x, caret.y + v_advance);
+            glyph.position = caret;
+            last_glyph = None;
+            caret.x += font.h_advance(glyph.id);
+            line += 1;
+        }
+        
+        target.push((c, line, glyph));
+    }
+}
+
 pub struct GlyphInfo {
     pub uv_min: Vec2,
     pub uv_max: Vec2,
     pub size: Vec2,
-    pub bearing: Vec2,
     pub advance: f32,
+    pub bearing: Vec2,
+    pub offset: f32,
 }
 
 pub struct Atlas {
@@ -224,16 +226,21 @@ impl Atlas {
     }
 
     pub fn generate_mesh(&self, text: &str, start: Vec2) -> Mesh<GlyphVertex> {
-        let mut vertices = vec![];
-        let mut indices = vec![];
+        let mut vertices = Vec::with_capacity(text.len() * 4);
+        let mut indices = Vec::with_capacity(text.len() * 6);
         let mut cursor_x = start[0];
         let cursor_y = start[1];
         let mut idx_offset = 0;
 
         for c in text.chars() {
             if let Some(glyph) = self.glyphs.get(&c) {
+                if glyph.size == Vec2::ZERO {
+                    cursor_x += glyph.advance;
+                    continue;
+                }
+
                 let x0 = cursor_x;
-                let y0 = cursor_y;
+                let y0 = cursor_y - ((glyph.bearing.y) + glyph.size[1]) + glyph.offset;
                 let x1 = x0 + glyph.size[0];
                 let y1 = y0 + glyph.size[1];
 
