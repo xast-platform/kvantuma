@@ -50,6 +50,7 @@ pub struct RenderPass<'a> {
 pub struct DrawDescriptor<'a, 'b, T, M: Material> {
     pub drawable: Option<&'b dyn Drawable>,
     pub instance_data: Option<&'b dyn InstanceData<UniformData = T>>,
+    pub global_shader_resources: &'b [&'b ShaderResource],
     pub material: &'a M,
 }
 
@@ -73,6 +74,9 @@ impl<'a> RenderPass<'a> {
         }
 
         self.pass.set_bind_group(0, &shader_resource.bind_group, &[]);
+        for (i, binding) in descriptor.global_shader_resources.iter().enumerate() {
+            self.pass.set_bind_group((i + 1) as u32, &binding.bind_group, &[]);
+        }
 
         if let Some(instance_data) = descriptor.instance_data {
             self.pass.set_push_constants(

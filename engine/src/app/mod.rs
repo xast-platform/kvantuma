@@ -31,7 +31,7 @@ pub trait Game {
         &mut self, 
         event: &WindowEvent, 
         world: &mut World,
-    ) -> anyhow::Result<bool>;
+    ) -> anyhow::Result<()>;
 
     fn render(
         &mut self, 

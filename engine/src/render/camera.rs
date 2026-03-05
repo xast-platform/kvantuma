@@ -1,110 +1,235 @@
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Vec3};
-use crate::Transform;
+use crate::{
+    Transform, 
+    render::{
+        RenderDevice, 
+        buffer::{BufferHandle, BufferResourceDescriptor}, 
+        registry::RenderRegistry, 
+        shader_resource::{ShaderResource, ShaderResourceLayout},
+        types::*,
+    }
+};
 
-#[derive(Clone, Debug, PartialEq,)]
-pub enum CameraType {
-    LookAt          = 0,
-    FirstPerson     = 1,
+pub struct CameraBuffer {
+    handle: BufferHandle,
+    resource: ShaderResource,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum ProjectionType {
-    Perspective,
-    Orthographic,
-}
+impl CameraBuffer {
+    pub fn new(
+        render_device: &RenderDevice, 
+        registry: &mut RenderRegistry,
+        layout: &ShaderResourceLayout,
+    ) -> CameraBuffer {
+        let handle = registry.new_buffer::<CameraUniform>(
+            render_device, 
+            1, 
+            BufferUsages::UNIFORM,
+        );
+        let buffer = registry.get_buffer(handle)
+            .unwrap();
+        let resource = ShaderResource::builder()
+            .with_buffer(&buffer)
+            .build(render_device, layout);
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Camera {
-    ty: CameraType,
-    proj: ProjectionType,
-    aspect: f32,
-    fovy: f32,
-    near: f32,
-    far: f32,
-}
-
-impl Camera {
-    pub fn new(aspect: f32, ty: CameraType, proj: ProjectionType) -> Camera {
-        Camera {
-            ty,
-            proj,
-            aspect,
-            fovy: 45.0,
-            near: 0.1,
-            far: 100.0,
+        CameraBuffer {
+            handle,
+            resource,
         }
     }
 
-    pub fn build_view_projection(&self, transform: &Transform) -> Mat4 {
-        let view = match self.ty {
-            CameraType::FirstPerson => {
-                Mat4::from_quat(transform.rotation.conjugate()) *
-                Mat4::from_translation(-transform.translation)
-            }
+    pub fn handle(&self) -> BufferHandle {
+        self.handle
+    }
+    
+    pub fn layout(render_device: &RenderDevice) -> ShaderResourceLayout {
+        ShaderResourceLayout::builder()
+            .with_label("Camera Buffer")
+            .with_buffer(&BufferResourceDescriptor {
+                visibility: ShaderStages::VERTEX_FRAGMENT,
+                buffer_type: BufferBindingType::Uniform,
+            })
+            .build(render_device)
+    }
+    
+    pub fn resource(&self) -> &ShaderResource {
+        &self.resource
+    }
+}
 
-            CameraType::LookAt => {
-                let eye = transform.translation;
-                let target = Vec3::ZERO;
-                Mat4::look_at_rh(eye, target, Vec3::Y)
-            }
-        };
+#[derive(Clone, Debug)]
+pub struct Camera {
+    pub near: f32,
+    pub far: f32,
+}
 
-        let projection = match self.proj {
-            ProjectionType::Perspective => {
-                Mat4::perspective_rh(
-                    self.fovy.to_radians(),
-                    self.aspect,
-                    self.near,
-                    self.far,
-                )
-            }
-            ProjectionType::Orthographic => {
-                let h = (self.far - self.near) / 2.0;
-                let w = h * self.aspect;
+impl Default for Camera {
+    fn default() -> Self {
+        Self {
+            near: 0.1,
+            far: 1000.0,
+        }
+    }
+}
 
-                Mat4::orthographic_rh(
-                    -w, w,
-                    -h, h,
-                    self.near,
-                    self.far,
-                )
-            }
-        };
+impl Camera {
+    pub fn view_matrix(transform: &Transform) -> Mat4 {
+        Mat4::from_quat(transform.rotation.conjugate())
+            * Mat4::from_translation(-transform.translation)
+    }
+}
 
-        projection * view
+#[derive(Clone, Debug)]
+pub struct PerspectiveCamera {
+    pub fovy: f32,
+    pub aspect: f32,
+}
+
+impl Default for PerspectiveCamera {
+    fn default() -> Self {
+        Self {
+            fovy: 45.0f32.to_radians(),
+            aspect: 16.0 / 9.0,
+        }
+    }
+}
+
+impl PerspectiveCamera {
+    pub fn new(fovy_deg: f32, aspect: f32) -> Self {
+        Self {
+            fovy: fovy_deg.to_radians(),
+            aspect,
+        }
     }
 
-    /// Sets the aspect ratio of the camera's view.
+    pub fn from_aspect(aspect: f32) -> Self {
+        Self {
+            aspect,
+            ..Default::default()
+        }
+    }
+
+    pub fn projection_matrix(&self, near: f32, far: f32) -> Mat4 {
+        Mat4::perspective_rh(self.fovy, self.aspect, near, far)
+    }
+
     pub fn set_aspect(&mut self, aspect: f32) {
         self.aspect = aspect;
     }
 }
 
-/// Uniform data structure for the camera, used for passing camera information to the GPU.
+#[derive(Clone, Debug)]
+pub struct OrthographicCamera {
+    pub left: f32,
+    pub right: f32,
+    pub bottom: f32,
+    pub top: f32,
+}
+
+impl OrthographicCamera {
+    pub fn new(
+        left: f32,
+        right: f32,
+        bottom: f32,
+        top: f32,
+    ) -> Self {
+        Self {
+            left,
+            right,
+            bottom,
+            top,
+        }
+    }
+
+    /// Create camera in pixel-perfect screen space (0..width, height..0)
+    pub fn from_viewport(width: f32, height: f32) -> Self {
+        Self {
+            left: 0.0,
+            right: width,
+            bottom: height,
+            top: 0.0,
+        }
+    }
+
+    /// Create camera centered around origin with given size
+    pub fn from_size(width: f32, height: f32) -> Self {
+        let half_w = width * 0.5;
+        let half_h = height * 0.5;
+
+        Self {
+            left: -half_w,
+            right: half_w,
+            bottom: -half_h,
+            top: half_h,
+        }
+    }
+
+    pub fn resize(&mut self, width: f32, height: f32) {
+        *self = OrthographicCamera::from_size(width, height);
+    }
+
+    pub fn resize_viewport(&mut self, width: f32, height: f32) {
+        *self = OrthographicCamera::from_viewport(width, height);
+    }
+
+    pub fn projection_matrix(&self, near: f32, far: f32) -> Mat4 {
+        Mat4::orthographic_rh(
+            self.left,
+            self.right,
+            self.bottom,
+            self.top,
+            near,
+            far,
+        )
+    }
+}
+
+pub fn build_perspective_uniform(
+    camera: &Camera,
+    projection: &PerspectiveCamera,
+    transform: &Transform,
+) -> CameraUniform {
+    let view = Camera::view_matrix(transform);
+    let proj = projection.projection_matrix(camera.near, camera.far);
+    let view_proj = proj * view;
+
+    CameraUniform {
+        position: transform.translation,
+        view_proj,
+        _padding: 0,
+    }
+}
+
+pub fn build_orthographic_uniform(
+    camera: &Camera,
+    projection: &OrthographicCamera,
+    transform: &Transform,
+) -> CameraUniform {
+    let view = Camera::view_matrix(transform);
+    let proj = projection.projection_matrix(camera.near, camera.far);
+    let view_proj = proj * view;
+
+    CameraUniform {
+        position: transform.translation,
+        view_proj,
+        _padding: 0,
+    }
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Zeroable, Pod)]
 pub struct CameraUniform {
-    position: Vec3,
-    _padding: u32,
-    view_projection: Mat4,
+    pub position: Vec3,
+    pub _padding: u32,
+    pub view_proj: Mat4,
 }
 
 impl Default for CameraUniform {
     fn default() -> Self {
-        CameraUniform {
+        Self {
             position: Vec3::ZERO,
-            view_projection: Mat4::IDENTITY,
-            _padding: 0,
-        }
-    }
-}
-
-impl CameraUniform {
-    pub fn new(camera: &Camera, transform: &Transform) -> CameraUniform {
-        CameraUniform {
-            position: transform.translation,
-            view_projection: camera.build_view_projection(transform),
+            view_proj: Mat4::IDENTITY,
             _padding: 0,
         }
     }

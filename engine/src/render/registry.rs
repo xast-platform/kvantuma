@@ -15,6 +15,7 @@ use super::{
     buffer::{BufferHandle, BufferStorage},
     material::Material,
     pipeline::Pipeline,
+    shader_resource::ShaderResourceLayout,
     texture::{Texture, TextureHandle},
 };
 
@@ -31,13 +32,22 @@ impl RenderRegistry {
         RenderRegistry::default()
     }
 
-    pub fn register_material<M: Material + 'static>(&mut self, render_device: &RenderDevice) {
+    pub fn register_material<M: Material + 'static>(
+        &mut self,
+        render_device: &RenderDevice,
+        global_layouts: &[&ShaderResourceLayout],
+    ) {
+        let material_layout = M::shader_resource_layout(render_device);
+        let mut bindings = Vec::with_capacity(global_layouts.len() + 1);
+        bindings.push(&material_layout);
+        bindings.extend(global_layouts.iter().copied());
+
         self.pipelines
             .entry(TypeId::of::<M>())
             .or_insert(
                 Pipeline::new_render(render_device, &RenderPipelineDescriptor {
                     shader: M::shader(),
-                    bindings: &[&M::shader_resource_layout(render_device)],
+                    bindings: &bindings,
                     label: &pretty_type_name::pretty_type_name::<M>(),
                     vertex_layout: M::vertex_layout(),
                     surface_formats: &[render_device.surface_format()],

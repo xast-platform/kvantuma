@@ -11,3 +11,4 @@ hecs = "0.10"
 glam = { version = "0.32.0", features = ["serde", "bytemuck", "rand"] }
 
 xastge = { path = "engine" }
+slotmap = "1.1.1"

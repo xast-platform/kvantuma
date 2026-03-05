@@ -6,7 +6,17 @@ use xastge::{
         window::{WindowDescriptor, WindowEvent, WindowMode},
     }, 
     render::{
-        Drawable, RenderDevice, RenderSurface, error::RenderError, include_wgsl, material::{Material, TintedTextureMaterial}, mesh::{Mesh, Vertex}, pass::DrawDescriptor, registry::RenderRegistry, shader_resource::{ShaderResource, ShaderResourceLayout}, texture::{TextureHandle, TextureResourceDescriptor, TextureResourceUsage}, types::*
+        Drawable, RenderDevice, RenderSurface, 
+        camera::{Camera, CameraBuffer, OrthographicCamera, PerspectiveCamera}, 
+        error::RenderError, 
+        include_wgsl, 
+        material::Material,
+        mesh::Mesh, 
+        pass::DrawDescriptor,
+        registry::RenderRegistry, 
+        shader_resource::{ShaderResource, ShaderResourceLayout}, 
+        texture::{TextureHandle, TextureResourceDescriptor, TextureResourceUsage}, 
+        types::*,
     }, 
     ui::{
         atlas::GlyphVertex, 
@@ -14,8 +24,13 @@ use xastge::{
     }
 };
 
+pub mod game;
+pub mod systems;
+
 use glam::{Quat, Vec2, Vec3};
-use hecs::{World};
+use hecs::{With, World};
+
+use crate::systems::camera::update_camera_buffer;
 
 struct KvantumaGame {
     registry: RenderRegistry,
@@ -67,60 +82,54 @@ impl Material for TextMaterial {
 
 impl Game for KvantumaGame {
     fn init(&mut self, world: &mut World, render_device: &mut RenderDevice) -> anyhow::Result<()> {
-        self.registry.register_material::<TintedTextureMaterial>(render_device);
-        self.registry.register_material::<TextMaterial>(render_device);
-
-        let material = TintedTextureMaterial::new(
-            "assets/textures/texture.jpg", 
-            Vec3::new(0.0, 1.0, 0.5), 
+        let camera_layout = CameraBuffer::layout(render_device);
+        self.registry.register_material::<TextMaterial>(
             render_device, 
-            &mut self.registry,
-        )?;
-
-        let mut mdl = Mesh::load_obj("assets/meshes/monkey.obj");
-        mdl.update(render_device, &mut self.registry);
-
-        let transform_monkey = Transform {
-            translation: Vec3::new(0.0, 0.0, 0.0),
-            ..Default::default()
-        };
+            &[&camera_layout]
+        );
 
         let font = self.registry.new_font(
             FontRef::try_from_slice(include_bytes!("../assets/fonts/KVANTUMA1451.ttf"))?
         );
-        self.registry.add_font_atlas(render_device, font, 64);
+        self.registry.add_font_atlas(render_device, font, 128);
         let atlas = self.registry
-            .get_atlas(font, 64)
+            .get_atlas(font, 128)
             .unwrap();
 
         let text_material = TextMaterial {
             atlas: atlas.texture(),
         };
 
-        let text1 = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur et sapien urna. Aliquam non quam purus. Nunc imperdiet tincidunt maximus. Vestibulum elementum tortor eu urna vehicula bibendum. Aliquam elementum risus sed purus varius ultrices. Praesent eget libero interdum, facilisis lorem eget, tempor ligula. Etiam viverra volutpat magna, quis tincidunt arcu pharetra et. Mauris orci ex, fermentum in sem in, varius porta est. Phasellus id metus lobortis, vehicula erat non, lacinia nibh. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. ";
+        let text1 = "KV^NTUMA";
         let mut mesh1 = atlas.generate_mesh(text1, Vec2::ZERO, 5.0);
         let transform1 = Transform {
-            translation: Vec3::new(-1.5, 0.0, 0.0),
+            translation: Vec3::new(0.0, 0.0, 0.0),
             scale: Vec3::ONE,
             rotation: Quat::IDENTITY,
         };
-
-        // let text2 = "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG!";
-        // let mut mesh2 = atlas.generate_mesh(text2, Vec2::ZERO);
-        // let transform2 = Transform {
-        //     translation: Vec3::new(-0.7, 0.5, 0.0),
-        //     scale: Vec3::ONE,
-        //     rotation: Quat::IDENTITY,
-        // };
-
         mesh1.update(render_device, &mut self.registry);
-        // mesh2.update(render_device, &mut self.registry);
 
         world.spawn((mesh1, text_material.clone(), transform1));
-        // world.spawn((mesh2, text_material, transform2));
-        world.spawn((mdl, material, transform_monkey));
 
-        world.spawn((true, 0));
+        let size = render_device.size();
+        world.spawn((
+            OrthographicCamera::from_viewport(size.x as f32, size.y as f32),
+            Camera::default(),
+            Transform {
+                translation: Vec3::new(0.0, 0.0, 1.0),
+                ..Default::default()
+            },
+            CameraBuffer::new(render_device, &mut self.registry, &camera_layout),
+        ));
+        world.spawn((
+            PerspectiveCamera::from_aspect(size.x as f32 / size.y as f32),
+            Camera::default(),
+            Transform {
+                translation: Vec3::new(0.0, 0.0, 5.0),
+                ..Default::default()
+            },
+            CameraBuffer::new(render_device, &mut self.registry, &camera_layout),
+        ));
 
         Ok(())
     }
@@ -129,36 +138,38 @@ impl Game for KvantumaGame {
         Ok(())
     }
 
-    fn input(&mut self, _event: &WindowEvent, _world: &mut World) -> anyhow::Result<bool> {
-        Ok(false)
+    fn input(&mut self, event: &WindowEvent, world: &mut World) -> anyhow::Result<()> {
+        match event {
+            WindowEvent::FramebufferSize(width, height) => {
+                for (_, ort_cam) in &mut world.query::<With<&mut OrthographicCamera, &Camera>>() {
+                    ort_cam.resize_viewport(*width as f32, *height as f32);
+                }
+
+                for (_, persp_cam) in &mut world.query::<With<&mut PerspectiveCamera, &Camera>>() {
+                    persp_cam.set_aspect(*width as f32 / *height as f32);
+                }
+            },
+            WindowEvent::Close => {
+                // save later
+            }
+            _ => {},
+        }
+
+        Ok(())
     }
 
     fn render(&mut self, world: &mut World, render_device: &mut RenderDevice) -> Result<(), RenderError> {
+        update_camera_buffer(world, render_device, &self.registry);
+        
         let canvas = render_device.canvas()?;
         let canvases: &[&dyn RenderSurface] = &[&canvas];
         let mut ctx = render_device.draw_ctx();
 
-        {
-            for (_, (mesh, material, tr)) in &mut world.query::<(&Mesh<Vertex>, &TintedTextureMaterial, &Transform)>() {
-                let mut render_pass = ctx.render_pass(
-                    canvases, 
-                    render_device.depth_texture(),
-                    Operations {
-                        load: LoadOp::Clear(Color::BLACK),
-                        store: StoreOp::Store,
-                    }
-                );
-                
-                // render_pass.draw(render_device, &self.registry, DrawDescriptor::<_, _> {
-                //     drawable: Some(mesh),
-                //     instance_data: Some(tr),
-                //     material,
-                // });
-            }
-        }
-
         // ----------- UI render pass -----------
         {
+            let mut ui_cam_query = world.query::<With<&CameraBuffer, &OrthographicCamera>>();
+            let (_, ui_cam_buffer) = ui_cam_query.into_iter().next().unwrap();
+
             for (_, (mesh, mat, t)) in &mut world.query::<(&Mesh<GlyphVertex>, &TextMaterial, &Transform)>() {
                 let mut render_pass = ctx.render_pass(
                     canvases, 
@@ -171,6 +182,7 @@ impl Game for KvantumaGame {
                 render_pass.draw(render_device, &self.registry, DrawDescriptor::<_, _> {
                     drawable: Some(mesh),
                     instance_data: Some(t),
+                    global_shader_resources: &[ui_cam_buffer.resource()],
                     material: mat,
                 });
             }
