@@ -91,9 +91,9 @@ impl Game for KvantumaGame {
         let font = self.registry.new_font(
             FontRef::try_from_slice(include_bytes!("../assets/fonts/KVANTUMA1451.ttf"))?
         );
-        self.registry.add_font_atlas(render_device, font, 128);
+        self.registry.add_font_atlas(render_device, font, 72);
         let atlas = self.registry
-            .get_atlas(font, 128)
+            .get_atlas(font, 72)
             .unwrap();
 
         let text_material = TextMaterial {
@@ -101,7 +101,7 @@ impl Game for KvantumaGame {
         };
 
         let text1 = "KV^NTUMA";
-        let mut mesh1 = atlas.generate_mesh(text1, Vec2::ZERO, 5.0);
+        let mut mesh1 = atlas.generate_mesh(text1, Vec2::new(0.0, 0.0), 3.0);
         let transform1 = Transform {
             translation: Vec3::new(0.0, 0.0, 0.0),
             scale: Vec3::ONE,
@@ -116,7 +116,7 @@ impl Game for KvantumaGame {
             OrthographicCamera::from_viewport(size.x as f32, size.y as f32),
             Camera::default(),
             Transform {
-                translation: Vec3::new(0.0, 0.0, 1.0),
+                translation: Vec3::new(0.0, 0.0, 5.0),
                 ..Default::default()
             },
             CameraBuffer::new(render_device, &mut self.registry, &camera_layout),
@@ -165,7 +165,6 @@ impl Game for KvantumaGame {
         let canvases: &[&dyn RenderSurface] = &[&canvas];
         let mut ctx = render_device.draw_ctx();
 
-        // ----------- UI render pass -----------
         {
             let mut ui_cam_query = world.query::<With<&CameraBuffer, &OrthographicCamera>>();
             let (_, ui_cam_buffer) = ui_cam_query.into_iter().next().unwrap();
@@ -175,7 +174,7 @@ impl Game for KvantumaGame {
                     canvases, 
                     render_device.depth_texture(),
                     Operations {
-                        load: LoadOp::Load,
+                        load: LoadOp::Clear(Color::BLACK),
                         store: StoreOp::Store,
                     },
                 );

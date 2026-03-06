@@ -32,5 +32,5 @@ fn vertex(@location(0) pos: vec2<f32>, @location(1) uv: vec2<f32>) -> Out {
 @fragment
 fn fragment(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     let a = textureSample(atlas, atlas_sampler, uv).r;
-    return vec4<f32>(mix(vec3<f32>(0.0), text_color, a), 1.0);
+    return vec4<f32>(text_color, a);
 }

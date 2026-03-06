@@ -237,10 +237,15 @@ impl Atlas {
                 let x1 = x0 + glyph.size[0];
                 let y1 = y0 + glyph.size[1];
 
-                vertices.push(GlyphVertex { pos: Vec2::new(x0, y0) / self.size as f32, uv: Vec2::new(glyph.uv_min[0], glyph.uv_max[1]) });
-                vertices.push(GlyphVertex { pos: Vec2::new(x1, y0) / self.size as f32, uv: Vec2::new(glyph.uv_max[0], glyph.uv_max[1]) });
-                vertices.push(GlyphVertex { pos: Vec2::new(x1, y1) / self.size as f32, uv: Vec2::new(glyph.uv_max[0], glyph.uv_min[1]) });
-                vertices.push(GlyphVertex { pos: Vec2::new(x0, y1) / self.size as f32, uv: Vec2::new(glyph.uv_min[0], glyph.uv_min[1]) });
+                let p0 = Vec2::new(x0.round(), y0.round());
+                let p1 = Vec2::new(x1.round(), y0.round());
+                let p2 = Vec2::new(x1.round(), y1.round());
+                let p3 = Vec2::new(x0.round(), y1.round());
+
+                vertices.push(GlyphVertex { pos: p0, uv: Vec2::new(glyph.uv_min[0], glyph.uv_max[1]) });
+                vertices.push(GlyphVertex { pos: p1, uv: Vec2::new(glyph.uv_max[0], glyph.uv_max[1]) });
+                vertices.push(GlyphVertex { pos: p2, uv: Vec2::new(glyph.uv_max[0], glyph.uv_min[1]) });
+                vertices.push(GlyphVertex { pos: p3, uv: Vec2::new(glyph.uv_min[0], glyph.uv_min[1]) });
 
                 indices.extend_from_slice(&[
                     idx_offset, idx_offset+1, idx_offset+2,

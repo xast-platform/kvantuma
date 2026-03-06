@@ -132,6 +132,7 @@ impl RenderRegistry {
                 width: atlas_size as u32,
                 height: atlas_size as u32,
                 label: "Font atlas".to_owned(),
+                filter: FilterMode::Nearest,
                 format: TextureFormat::R8Unorm,
                 ..Default::default()
             });

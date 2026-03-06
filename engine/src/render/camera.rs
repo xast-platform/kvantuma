@@ -147,8 +147,8 @@ impl OrthographicCamera {
         Self {
             left: 0.0,
             right: width,
-            bottom: height,
-            top: 0.0,
+            bottom: 0.0,
+            top: height,
         }
     }
 
