@@ -1,4 +1,5 @@
 use bytemuck::{Pod, Zeroable};
+use flecs_ecs::macros::Component;
 use glam::{Mat4, Vec3};
 use crate::{
     Transform, 
@@ -11,6 +12,7 @@ use crate::{
     }
 };
 
+#[derive(Component)]
 pub struct CameraBuffer {
     handle: BufferHandle,
     resource: ShaderResource,
@@ -58,7 +60,7 @@ impl CameraBuffer {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Component)]
 pub struct Camera {
     pub near: f32,
     pub far: f32,
@@ -80,7 +82,7 @@ impl Camera {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Component)]
 pub struct PerspectiveCamera {
     pub fovy: f32,
     pub aspect: f32,
@@ -119,7 +121,7 @@ impl PerspectiveCamera {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Component)]
 pub struct OrthographicCamera {
     pub left: f32,
     pub right: f32,

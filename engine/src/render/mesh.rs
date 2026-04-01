@@ -1,4 +1,5 @@
 use bytemuck::{Pod, Zeroable};
+use flecs_ecs::macros::Component;
 use glam::{Vec2, Vec3};
 
 use super::{Drawable, RenderDevice, buffer::BufferHandle, registry::RenderRegistry, types::*};
@@ -27,8 +28,8 @@ impl Vertex {
     }
 }
 
-#[derive(Default, Debug)]
-pub struct Mesh<V> {
+#[derive(Default, Debug, Component)]
+pub struct Mesh<V: Send + Sync + 'static> {
     pub vertices: Vec<V>,
     pub indices: Vec<u32>,
 
@@ -36,7 +37,7 @@ pub struct Mesh<V> {
     pub index_buffer: Option<BufferHandle>,
 }
 
-impl<V> Mesh<V> {
+impl<V: Send + Sync + 'static> Mesh<V> {
     pub fn new(vertices: Vec<V>, indices: Vec<u32>) -> Mesh<V> {
         Mesh {
             vertices,
@@ -105,7 +106,7 @@ impl Mesh<Vertex> {
     }
 }
 
-impl<V: Pod> Drawable for Mesh<V> {
+impl<V: Pod + Send + Sync + 'static> Drawable for Mesh<V> {
     fn update(&mut self, render_device: &mut RenderDevice, registry: &mut RenderRegistry) {
         if self.vertex_buffer.is_none() {
             self.vertex_buffer = Some(

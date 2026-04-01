@@ -34,11 +34,7 @@ impl ShaderResourceLayoutBuilder {
         mut self,
         descriptor: &TextureResourceDescriptor,
     ) -> Self {
-        let view_dimension = match descriptor.dimension {
-            wgpu::TextureDimension::D1 => wgpu::TextureViewDimension::D1,
-            wgpu::TextureDimension::D2 => wgpu::TextureViewDimension::D2,
-            wgpu::TextureDimension::D3 => wgpu::TextureViewDimension::D3,
-        };
+        let view_dimension = descriptor.view_dimension;
 
         let bind_group_layout_entries = descriptor.usage
             .iter()

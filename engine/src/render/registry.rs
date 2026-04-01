@@ -52,6 +52,10 @@ impl RenderRegistry {
                     vertex_layout: M::vertex_layout(),
                     surface_formats: &[render_device.surface_format()],
                     blend_state: M::blend_state(),
+                    depth_write_enabled: M::depth_write_enabled(),
+                    depth_compare: M::depth_compare(),
+                    front_face: M::front_face(),
+                    cull_mode: M::cull_mode(),
                 })
             );
     }
@@ -100,6 +104,39 @@ impl RenderRegistry {
 
         let texture = Texture::new(render_device, descriptor);
         texture.fill(render_device, &image);
+
+        Ok(self.textures.insert(texture))
+    }
+
+    pub fn load_cubemap(
+        &mut self,
+        render_device: &RenderDevice,
+        paths: [&str; 6],
+        mut descriptor: TextureDescriptor,
+    ) -> Result<TextureHandle, ImageError> {
+        let mut images = Vec::with_capacity(6);
+        for path in paths {
+            let image = image::open(path)?.to_rgba8();
+            images.push(image);
+        }
+
+        descriptor.width = images[0].width();
+        descriptor.height = images[0].height();
+        descriptor.depth = Some(6);
+        descriptor.dimension = TextureDimension::D2;
+        descriptor.view_dimension = TextureViewDimension::Cube;
+
+        let texture = Texture::new(render_device, descriptor);
+
+        for (i, image) in images.iter().enumerate() {
+            texture.fill_layer_rgba8(
+                render_device,
+                i as u32,
+                image.width(),
+                image.height(),
+                image,
+            );
+        }
 
         Ok(self.textures.insert(texture))
     }

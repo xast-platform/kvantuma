@@ -1,8 +1,8 @@
 use glam::UVec2;
 use glfw::{Glfw, PWindow, WindowEvent};
-use hecs::World;
+use flecs_ecs::prelude::World;
 
-use crate::{app::{helper::{GameLoopCallbacks, game_loop}, window::{Events, WindowDescriptor, WindowMode}}, error::GameError, render::{RenderDevice, error::RenderError}};
+use crate::{app::{helper::{GameLoopCallbacks, game_loop}, window::{Events, WindowController, WindowDescriptor, WindowMode}}, error::GameError, render::{RenderDevice, error::RenderError}};
 
 pub mod base;
 pub mod helper;
@@ -31,6 +31,7 @@ pub trait Game {
         &mut self, 
         event: &WindowEvent, 
         world: &mut World,
+        window: &mut WindowController<'_>,
     ) -> anyhow::Result<()>;
 
     fn render(
@@ -73,10 +74,8 @@ impl<G> App<G> {
 
         let render_device = pollster::block_on(RenderDevice::new(&window))?;
 
-        window.set_framebuffer_size_polling(true);
-        window.set_key_polling(true);
-        window.set_mouse_button_polling(true);
-        window.set_pos_polling(true);
+        window.set_all_polling(true);
+        window.set_cursor_mode(desc.cursor_mode);
 
         Ok(App { 
             world, 
@@ -131,7 +130,8 @@ impl<G: Game + 'static> App<G> {
                         _ => {}
                     }
 
-                    g.game.game.input(e, &mut g.game.world)
+                    let mut window = WindowController::new(&mut g.window);
+                    g.game.game.input(e, &mut g.game.world, &mut window)
                         .unwrap_or_else(|err| panic!("Failed game input: {err}"));
                 },
             },

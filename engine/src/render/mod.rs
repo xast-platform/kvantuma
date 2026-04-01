@@ -24,6 +24,7 @@ pub mod types {
         BufferBindingType,
         FilterMode,
         TextureDimension,
+        TextureViewDimension,
         TextureUsages,
         TextureFormat,
         TextureSampleType,
@@ -38,6 +39,9 @@ pub mod types {
         StoreOp,
         Color,
         BlendState,
+        CompareFunction,
+        FrontFace,
+        Face,
     };
 }
 
@@ -128,6 +132,7 @@ impl RenderDevice {
                 height: render_device.config.height,
                 filter: wgpu::FilterMode::Linear,
                 dimension: wgpu::TextureDimension::D2,
+                view_dimension: wgpu::TextureViewDimension::D2,
                 format: wgpu::TextureFormat::Depth32Float,
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
                 depth: None,
@@ -222,6 +227,11 @@ pub trait Drawable {
     fn index_buffer(&self) -> Option<BufferHandle>;
 
     fn indices(&self) -> u32;
+}
+
+pub fn updated<T: Drawable>(mut drawable: T, render_device: &mut RenderDevice, registry: &mut RenderRegistry) -> T {
+    drawable.update(render_device, registry);
+    drawable
 }
 
 /// Trait used to convert Rust data structures to GPU-friendly ones.

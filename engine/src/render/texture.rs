@@ -5,6 +5,7 @@ use bitflags::bitflags;
 use glam::UVec2;
 use image::{ImageBuffer, Pixel};
 use slotmap::new_key_type;
+use wgpu::TextureViewDimension;
 use crate::render::registry::RenderRegistry;
 
 use super::types::*;
@@ -65,6 +66,7 @@ pub struct TextureDescriptor {
     pub format: TextureFormat,
     /// Number of mip levels for the texture.
     pub mip_level_count: u32,
+    pub view_dimension: TextureViewDimension,
     /// A human-readable label for debugging purposes. Displayed, when
     /// error affiliated with the texture occures
     pub label: String,
@@ -79,6 +81,7 @@ impl Default for TextureDescriptor {
             filter: wgpu::FilterMode::Linear,
             dimension: wgpu::TextureDimension::D2,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_dimension: TextureViewDimension::D2,
             format: Texture::DEFAULT_FORMAT,
             mip_level_count: 1,
             label: "Unnamed Texture".to_string(),
@@ -108,6 +111,7 @@ pub struct TextureResourceDescriptor {
     /// The type of sampler binding when used as a sampler.
     pub sampler_binding_type: Option<SamplerBindingType>,
     pub dimension: TextureDimension,
+    pub view_dimension: TextureViewDimension,
     pub format: TextureFormat,
 }
 
@@ -155,7 +159,10 @@ impl Texture {
             view_formats: &[],
         });
 
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let view = texture.create_view(&wgpu::TextureViewDescriptor {
+            dimension: Some(descriptor.view_dimension),
+            ..Default::default()
+        });
 
         let sampler = render_device.device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some(format!("{} Texture Sampler", descriptor.label).as_str()),
@@ -204,6 +211,39 @@ impl Texture {
                 height: image.height(),
                 depth_or_array_layers: 1,
             }
+        );
+    }
+
+    pub fn fill_layer_rgba8(
+        &self,
+        render_device: &RenderDevice,
+        layer: u32,
+        width: u32,
+        height: u32,
+        data: &[u8],
+    ) {
+        render_device.queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: self.texture(),
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: 0,
+                    y: 0,
+                    z: layer,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            data,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(4 * width),
+                rows_per_image: Some(height),
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
         );
     }
 

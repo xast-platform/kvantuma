@@ -34,6 +34,10 @@ pub struct RenderPipelineDescriptor<'a> {
     /// match ones in render pass
     pub surface_formats: &'a [wgpu::TextureFormat],
     pub blend_state: BlendState,
+    pub depth_write_enabled: bool,
+    pub depth_compare: CompareFunction,
+    pub front_face: FrontFace,
+    pub cull_mode: Option<Face>,
 }
 
 /// Descriptor for creating a compute pipeline.
@@ -97,16 +101,16 @@ impl Pipeline {
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList, 
                 strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw, 
-                cull_mode: Some(wgpu::Face::Back),
+                front_face: descriptor.front_face,
+                cull_mode: descriptor.cull_mode,
                 polygon_mode: wgpu::PolygonMode::Fill,
                 unclipped_depth: false,
                 conservative: false,
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less,
+                depth_write_enabled: descriptor.depth_write_enabled,
+                depth_compare: descriptor.depth_compare,
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),

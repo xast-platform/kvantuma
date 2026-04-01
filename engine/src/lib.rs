@@ -5,8 +5,11 @@ pub mod ui;
 pub mod error;
 pub mod utils;
 
+use flecs_ecs::macros::Component;
+
 use crate::render::InstanceData;
 
+#[derive(Component)]
 pub struct Transform {
     pub translation: glam::Vec3,
     pub rotation: glam::Quat,
