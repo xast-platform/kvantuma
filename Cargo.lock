@@ -1469,6 +1469,7 @@ dependencies = [
  "log",
  "pretty_env_logger",
  "slotmap",
+ "taffy",
  "xastge",
 ]
 

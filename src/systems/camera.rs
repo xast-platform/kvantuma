@@ -15,7 +15,7 @@ pub fn update_camera_buffer(
     world: &mut World,
     render_device: &RenderDevice,
     registry: &RenderRegistry,
-) {
+) {    
     world.each::<(&Camera, &OrthographicCamera, &Transform, &CameraBuffer)>(|(cam, ort_cam, t, buf)| {
         let uniform = build_orthographic_uniform(cam, ort_cam, t);
         if let Some(buf) = registry.get_buffer(buf.handle()) {

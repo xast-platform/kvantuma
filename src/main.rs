@@ -10,27 +10,29 @@ use xastge::{
         camera::{Camera, CameraBuffer, OrthographicCamera, PerspectiveCamera}, 
         error::RenderError, 
         include_wgsl, 
-        material::{ColorMaterial, Material, SkyboxMaterial},
+        material::{ColorMaterial, SkyboxMaterial},
         mesh::{Mesh, Vertex}, 
         pass::DrawDescriptor,
-        registry::RenderRegistry, 
-        shader_resource::{ShaderResource, ShaderResourceLayout}, 
-        texture::{TextureDescriptor, TextureHandle, TextureResourceDescriptor, TextureResourceUsage}, 
+        registry::RenderRegistry,
+        texture::TextureDescriptor, 
         types::*, updated,
     }, 
     ui::{
-        atlas::GlyphVertex, 
-        glyph::FontRef,
+        atlas::{FontHandle, GlyphVertex}, 
+        glyph::FontRef, material::TextMaterial,
     },
 };
 
 pub mod game;
+pub mod menu;
 pub mod systems;
+pub mod ui;
+pub mod singletons;
 
 use glam::{EulerRot, Quat, Vec2, Vec3};
 use flecs_ecs::prelude::*;
 
-use crate::systems::camera::update_camera_buffer;
+use crate::{game::GameState, singletons::init_singletons, systems::camera::update_camera_buffer, ui::row};
 
 #[derive(Component)]
 pub struct FpsCamera {
@@ -70,59 +72,18 @@ pub struct MovementInput {
     pub right: bool,
 }
 
+#[derive(Component)]
+pub struct MainFont(pub FontHandle);
+
 struct KvantumaGame {
     registry: RenderRegistry,
     ort_cam_id: Entity,
     persp_cam_id: Entity,
+    ui_manager: UiManager,
 }
 
 #[derive(Component)]
 struct SkyboxTag;
-
-#[derive(Clone, Component)]
-pub struct TextMaterial {
-    atlas: TextureHandle,
-}
-
-impl Material for TextMaterial {
-    fn shader() -> ShaderModuleDescriptor<'static> {
-        include_wgsl!("../assets/shaders/text.wgsl")
-    }
-
-    fn vertex_layout() -> Option<VertexBufferLayout<'static>> {
-        Some(GlyphVertex::vertex_buffer_layout())
-    }
-
-    fn shader_resource_layout(render_device: &RenderDevice) -> ShaderResourceLayout {
-        ShaderResourceLayout::builder()
-            .with_label("Text Material")
-            .with_texture(&TextureResourceDescriptor {
-                usage: TextureResourceUsage::TEXTURE | TextureResourceUsage::SAMPLER,
-                sample_type: Some(TextureSampleType::Float { filterable: true }),
-                sampler_binding_type: Some(SamplerBindingType::Filtering),
-                dimension: TextureDimension::D2,
-                view_dimension: TextureViewDimension::D2,
-                format: TextureFormat::R8Unorm,
-            })
-            .build(render_device)
-    }
-
-    fn shader_resource(
-        &self,
-        render_device: &RenderDevice,
-        registry: &RenderRegistry,
-    ) -> ShaderResource {
-        ShaderResource::builder()
-            .with_texture(
-                registry.get_texture(self.atlas).unwrap(),
-                TextureResourceUsage::TEXTURE | TextureResourceUsage::SAMPLER,
-            )
-            .build(
-                render_device,
-                &TextMaterial::shader_resource_layout(render_device),
-            )
-    }
-}
 
 impl Game for KvantumaGame {
     fn init(&mut self, world: &mut World, render_device: &mut RenderDevice) -> anyhow::Result<()> {
@@ -134,23 +95,31 @@ impl Game for KvantumaGame {
         self.registry.register_material::<SkyboxMaterial>(render_device, &[&camera_layout]);
 
         let font = self.registry.new_font(FontRef::try_from_slice(include_bytes!("../assets/fonts/KVANTUMA1451.ttf"))?);
-        self.registry.add_font_atlas(render_device, font, 72);
-        let atlas = self.registry.get_atlas(font, 72).unwrap();
-
-        world.entity()
-            .set(TextMaterial {
-                atlas: atlas.texture(),
-            })
-            .set(updated(
-                atlas.generate_mesh("KV^NTUMA", Vec2::new(0.0, 0.0), 3.0), 
+        
+        for size in 10..=72 {
+            self.registry.add_font_atlas(
                 render_device, 
-                &mut self.registry,
-            ))
-            .set(Transform {
-                translation: Vec3::new(0.0, 0.0, 0.0),
-                scale: Vec3::ONE,
-                rotation: Quat::IDENTITY,
-            });
+                font, 
+                size,
+            );
+        }
+        
+        // Initialize UI
+        use crate::ui::{text, button, UiScreen, col};
+        self.ui_manager.main_menu_screen = Some(UiScreen::new(
+            row(vec![
+                col(3, vec![]),
+                col(6, vec![
+                    text("KVΛNTUMA".to_owned()),
+                    button("New Game".to_owned(), None),
+                    button("Continue".to_owned(), None),
+                    button("Settings".to_owned(), None),
+                    button("Quit".to_owned(), None),
+                ]),
+            ]),
+            self.ui_manager.screen_width,
+            self.ui_manager.screen_height,
+        ));
 
         world.entity()
             .set(updated(
@@ -165,6 +134,7 @@ impl Game for KvantumaGame {
             ))
             .set(Transform::default());
 
+        // SKYBOX
         world.entity()
             .set(updated(
                 Mesh::load_obj("./assets/meshes/cube.obj"),
@@ -190,6 +160,7 @@ impl Game for KvantumaGame {
                 scale: Vec3::splat(200.0),
             });
 
+        // ORT CAMERA
         self.ort_cam_id = world.entity()
             .set(OrthographicCamera::from_viewport(size.x as f32, size.y as f32))
             .set(Camera::default())
@@ -200,6 +171,7 @@ impl Game for KvantumaGame {
             .set(CameraBuffer::new(render_device, &mut self.registry, &camera_layout))
             .id();
 
+        // PERSP CAMERA
         self.persp_cam_id = world.entity()
             .set(PerspectiveCamera::from_aspect(size.x as f32 / size.y as f32))
             .set(Camera::default())
@@ -216,8 +188,8 @@ impl Game for KvantumaGame {
             })
             .id();
 
-        world.set(MouseState::new(true));
-        world.set(MovementInput::default());
+        // SINGLETONS
+        init_singletons(world, font);
 
         Ok(())
     }
@@ -280,13 +252,23 @@ impl Game for KvantumaGame {
     ) -> anyhow::Result<()> {
         match event {
             WindowEvent::FramebufferSize(width, height) => {
+                let w = *width as f32;
+                let h = *height as f32;
+                
                 world.each::<(&mut OrthographicCamera, &Camera)>(|(ort_cam, _cam)| {
-                    ort_cam.resize_viewport(*width as f32, *height as f32);
+                    ort_cam.resize_viewport(w, h);
                 });
 
                 world.each::<(&mut PerspectiveCamera, &Camera)>(|(persp_cam, _cam)| {
-                    persp_cam.set_aspect(*width as f32 / *height as f32);
+                    persp_cam.set_aspect(w / h);
                 });
+                
+                // Update UI layout for new screen size
+                self.ui_manager.screen_width = w;
+                self.ui_manager.screen_height = h;
+                if let Some(screen) = &mut self.ui_manager.main_menu_screen {
+                    screen.recompute_layout(w, h);
+                }
             },
             WindowEvent::CursorPos(x, y) => {
                 let current = Vec2::new(*x as f32, *y as f32);
@@ -351,6 +333,14 @@ impl Game for KvantumaGame {
     }
 
     fn render(&mut self, world: &mut World, render_device: &mut RenderDevice) -> Result<(), RenderError> {
+        world.get::<&GameState>(|state| {
+            ui_system(state, &mut self.ui_manager, world);
+        });
+        
+        world.get::<&MainFont>(|font| {
+            text_rendering_system(world, &mut self.registry, font, render_device);
+        });
+
         update_camera_buffer(world, render_device, &self.registry);
         
         let canvas = render_device.canvas()?;
@@ -426,6 +416,95 @@ impl Game for KvantumaGame {
     }
 }
 
+pub struct UiManager {
+    pub main_menu_screen: Option<crate::ui::UiScreen<()>>,
+    pub ui_entities: Vec<Entity>,
+    pub screen_width: f32,
+    pub screen_height: f32,
+}
+
+#[allow(clippy::single_match)]
+fn ui_system(
+    state: &GameState,
+    ui: &mut UiManager,
+    world: &World,
+) {
+    for entity_id in &ui.ui_entities {
+        world.entity_from_id(*entity_id).destruct();
+    }
+    ui.ui_entities.clear();
+
+    match state {
+        GameState::MainMenu(_mm_data) => {
+            if let Some(screen) = &ui.main_menu_screen {
+                let nodes = screen.nodes();
+                
+                for (node, pos) in nodes {
+                    use crate::ui::{UiNode, UiText, UiButton, UiPosition};
+                    
+                    let screen_pos = Vec2::new(pos.x, ui.screen_height - pos.y);
+                    
+                    let entity = match node {
+                        UiNode::Text { value, .. } => {
+                            world.entity()
+                                .set(UiText { value: value.to_string(), font_size: 32 })
+                                .set(UiPosition { screen_pos })
+                        }
+                        UiNode::Button { text, .. } => {
+                            world.entity()
+                                .set(UiButton { text: text.to_string(), font_size: 32 })
+                                .set(UiPosition { screen_pos })
+                        }
+                        _ => continue,
+                    };
+                    
+                    ui.ui_entities.push(entity.id());
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn text_rendering_system(
+    world: &World,
+    registry: &mut RenderRegistry,
+    font: &MainFont,
+    render_device: &mut RenderDevice,
+) {
+    world.query::<(&crate::ui::UiText, &crate::ui::UiPosition)>()
+        .build()
+        .each_entity(|entity, (ui_text, ui_pos)| {
+            let atlas = registry.get_atlas(font.0, ui_text.font_size).unwrap();
+            let mesh = atlas.generate_mesh(&ui_text.value, Vec2::ZERO, 1.0);
+            
+            entity
+                .set(TextMaterial { atlas: atlas.texture() })
+                .set(updated(mesh, render_device, registry))
+                .set(Transform {
+                    translation: Vec3::new(ui_pos.screen_pos.x, ui_pos.screen_pos.y, 0.0),
+                    scale: Vec3::ONE,
+                    rotation: Quat::IDENTITY,
+                });
+        });
+    
+    world.query::<(&crate::ui::UiButton, &crate::ui::UiPosition)>()
+        .build()
+        .each_entity(|entity, (ui_button, ui_pos)| {
+            let atlas = registry.get_atlas(font.0, ui_button.font_size).unwrap();
+            let mesh = atlas.generate_mesh(&ui_button.text, Vec2::ZERO, 1.0);
+            
+            entity
+                .set(TextMaterial { atlas: atlas.texture() })
+                .set(updated(mesh, render_device, registry))
+                .set(Transform {
+                    translation: Vec3::new(ui_pos.screen_pos.x, ui_pos.screen_pos.y, 0.0),
+                    scale: Vec3::ONE,
+                    rotation: Quat::IDENTITY,
+                });
+        });
+}
+
 fn main() -> anyhow::Result<()> {
     pretty_env_logger::formatted_builder()
         .filter_level(LevelFilter::Info)
@@ -444,6 +523,12 @@ fn main() -> anyhow::Result<()> {
             registry: RenderRegistry::new(),
             ort_cam_id: Entity::null(),
             persp_cam_id: Entity::null(),
+            ui_manager: UiManager { 
+                main_menu_screen: None,
+                ui_entities: Vec::new(),
+                screen_width: 1024.0,
+                screen_height: 1024.0,
+            },
         },
     )?.run();
 

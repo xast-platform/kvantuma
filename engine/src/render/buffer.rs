@@ -132,7 +132,7 @@ impl BufferStorage {
 }
 
 #[cfg(doc)]
-use super::pipeline::ShaderResource;
+use super::shader_resource::ShaderResource;
 /// Used to bind generic buffer in [`ShaderResource`]
 pub struct BufferResourceDescriptor {
     /// Indicates in which shader stages (Vertex, Fragment and/or Compute)

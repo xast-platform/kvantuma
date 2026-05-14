@@ -1,7 +1,11 @@
+use flecs_ecs::macros::Component;
 use slotmap::new_key_type;
 
+use crate::menu::main_menu::MainMenuData;
+
+#[derive(Component)]
 pub enum GameState {
-    MainMenu,
+    MainMenu(MainMenuData),
     LoadingLevel(Level),
     LoadedLevel(Level)
 }
