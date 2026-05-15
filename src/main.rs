@@ -3,13 +3,12 @@ use xastge::{
     Transform, 
     app::{
         App, Game,
-        window::{Action, CursorMode, Key, MouseButton, WindowController, WindowDescriptor, WindowEvent, WindowMode},
+        window::{Action, CursorMode, Key, MouseButton, WindowController, WindowDescriptor, WindowEvent, WindowMode, WindowSize},
     }, 
     render::{
         RenderDevice, RenderSurface, 
         camera::{Camera, CameraBuffer, OrthographicCamera, PerspectiveCamera}, 
         error::RenderError, 
-        include_wgsl, 
         material::{ColorMaterial, SkyboxMaterial},
         mesh::{Mesh, Vertex}, 
         pass::DrawDescriptor,
@@ -23,6 +22,8 @@ use xastge::{
     },
 };
 
+pub type KvUiManager = UiManager<ScreenKey, Msg>;
+
 pub mod game;
 pub mod menu;
 pub mod systems;
@@ -32,7 +33,8 @@ pub mod singletons;
 use glam::{EulerRot, Quat, Vec2, Vec3};
 use flecs_ecs::prelude::*;
 
-use crate::{game::GameState, singletons::init_singletons, systems::camera::update_camera_buffer, ui::row};
+use crate::{game::GameState, singletons::init_singletons, systems::camera::update_camera_buffer, ui::{UiManager, key::ScreenKey, msg::Msg, row}};
+use crate::ui::{text, button, UiScreen, col};
 
 #[derive(Component)]
 pub struct FpsCamera {
@@ -79,7 +81,7 @@ struct KvantumaGame {
     registry: RenderRegistry,
     ort_cam_id: Entity,
     persp_cam_id: Entity,
-    ui_manager: UiManager,
+    ui_manager: KvUiManager,
 }
 
 #[derive(Component)]
@@ -104,22 +106,22 @@ impl Game for KvantumaGame {
             );
         }
         
-        // Initialize UI
-        use crate::ui::{text, button, UiScreen, col};
-        self.ui_manager.main_menu_screen = Some(UiScreen::new(
-            row(vec![
-                col(3, vec![]),
-                col(6, vec![
-                    text("KVΛNTUMA".to_owned()),
-                    button("New Game".to_owned(), None),
-                    button("Continue".to_owned(), None),
-                    button("Settings".to_owned(), None),
-                    button("Quit".to_owned(), None),
+        world.get::<&WindowSize>(|wsize| {
+            self.ui_manager.add_screen(ScreenKey::MainMenu, UiScreen::new(
+                row(vec![
+                    col(6, vec![]),
+                    col(6, vec![
+                        text("KVΛNTUMA".to_owned()),
+                        button("New Game".to_owned(), None),
+                        button("Continue".to_owned(), None),
+                        button("Settings".to_owned(), None),
+                        button("Quit".to_owned(), None),
+                    ]),
                 ]),
-            ]),
-            self.ui_manager.screen_width,
-            self.ui_manager.screen_height,
-        ));
+                wsize.width,
+                wsize.height,
+            ));
+        });
 
         world.entity()
             .set(updated(
@@ -263,12 +265,7 @@ impl Game for KvantumaGame {
                     persp_cam.set_aspect(w / h);
                 });
                 
-                // Update UI layout for new screen size
-                self.ui_manager.screen_width = w;
-                self.ui_manager.screen_height = h;
-                if let Some(screen) = &mut self.ui_manager.main_menu_screen {
-                    screen.recompute_layout(w, h);
-                }
+                self.ui_manager.recompute_layout(w, h);
             },
             WindowEvent::CursorPos(x, y) => {
                 let current = Vec2::new(*x as f32, *y as f32);
@@ -334,7 +331,9 @@ impl Game for KvantumaGame {
 
     fn render(&mut self, world: &mut World, render_device: &mut RenderDevice) -> Result<(), RenderError> {
         world.get::<&GameState>(|state| {
-            ui_system(state, &mut self.ui_manager, world);
+            world.get::<&WindowSize>(|wsize| {
+                ui_system(state, &mut self.ui_manager, wsize, world);
+            })
         });
         
         world.get::<&MainFont>(|font| {
@@ -416,33 +415,29 @@ impl Game for KvantumaGame {
     }
 }
 
-pub struct UiManager {
-    pub main_menu_screen: Option<crate::ui::UiScreen<()>>,
-    pub ui_entities: Vec<Entity>,
-    pub screen_width: f32,
-    pub screen_height: f32,
-}
-
 #[allow(clippy::single_match)]
 fn ui_system(
     state: &GameState,
-    ui: &mut UiManager,
+    ui: &mut KvUiManager,
+    wsize: &WindowSize,
     world: &World,
 ) {
-    for entity_id in &ui.ui_entities {
+    for entity_id in ui.entities() {
         world.entity_from_id(*entity_id).destruct();
     }
-    ui.ui_entities.clear();
+    ui.entities_mut().clear();
 
     match state {
         GameState::MainMenu(_mm_data) => {
-            if let Some(screen) = &ui.main_menu_screen {
+            let mut entities = vec![];
+
+            if let Some(screen) = ui.get_screen(ScreenKey::MainMenu) {
                 let nodes = screen.nodes();
                 
                 for (node, pos) in nodes {
                     use crate::ui::{UiNode, UiText, UiButton, UiPosition};
                     
-                    let screen_pos = Vec2::new(pos.x, ui.screen_height - pos.y);
+                    let screen_pos = Vec2::new(pos.x, wsize.height - pos.y);
                     
                     let entity = match node {
                         UiNode::Text { value, .. } => {
@@ -458,9 +453,11 @@ fn ui_system(
                         _ => continue,
                     };
                     
-                    ui.ui_entities.push(entity.id());
+                    entities.push(entity.id());
                 }
             }
+
+            ui.entities_mut().extend(entities);
         }
         _ => {}
     }
@@ -523,12 +520,7 @@ fn main() -> anyhow::Result<()> {
             registry: RenderRegistry::new(),
             ort_cam_id: Entity::null(),
             persp_cam_id: Entity::null(),
-            ui_manager: UiManager { 
-                main_menu_screen: None,
-                ui_entities: Vec::new(),
-                screen_width: 1024.0,
-                screen_height: 1024.0,
-            },
+            ui_manager: KvUiManager::new(1024.0, 1024.0),
         },
     )?.run();
 

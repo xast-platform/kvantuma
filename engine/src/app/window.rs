@@ -1,3 +1,4 @@
+use flecs_ecs::macros::Component;
 use glfw::{GlfwReceiver, PWindow};
 
 pub struct WindowDescriptor {
@@ -18,6 +19,12 @@ impl Default for WindowDescriptor {
             cursor_mode: glfw::CursorMode::Normal,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Component)]
+pub struct WindowSize {
+    pub width: f32,
+    pub height: f32,
 }
 
 pub struct WindowController<'a> {

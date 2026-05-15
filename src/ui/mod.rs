@@ -2,7 +2,10 @@ use std::{collections::HashMap, hash::Hash};
 
 use taffy::{TaffyTree, Style as TaffyStyle, FlexDirection, Dimension, Size, AvailableSpace, LengthPercentage, AlignItems, JustifyContent};
 use glam::Vec2;
-use flecs_ecs::macros::Component;
+use flecs_ecs::{core::Entity, macros::Component};
+
+pub mod key;
+pub mod msg;
 
 #[derive(Clone)]
 pub enum UiNode<Msg: Clone> {
@@ -94,7 +97,47 @@ pub struct Style {
 
 pub struct UiManager<K, Msg: Clone> {
     screens: HashMap<K, UiScreen<Msg>>,
-    current_screen: K,
+    current_screen: Option<K>,
+    ui_entities: Vec<Entity>,
+    screen_width: f32,
+    screen_height: f32,
+}
+
+impl<Msg: Clone, K: Hash + Eq> UiManager<K, Msg> {
+    pub fn new(screen_width: f32, screen_height: f32) -> Self {
+        Self {
+            screens: HashMap::new(),
+            current_screen: None,
+            ui_entities: Vec::new(),
+            screen_width,
+            screen_height,
+        }
+    }
+
+    pub fn entities(&self) -> &[Entity] {
+        &self.ui_entities
+    }
+
+    pub fn entities_mut(&mut self) -> &mut Vec<Entity> {
+        &mut self.ui_entities
+    }
+
+    pub fn add_screen(&mut self, label: K, screen: UiScreen<Msg>) {
+        self.screens.insert(label, screen);
+    }
+
+    pub fn get_screen(&self, label: K) -> Option<&UiScreen<Msg>> {
+        self.screens.get(&label)
+    }
+
+    pub fn recompute_layout(&mut self, screen_width: f32, screen_height: f32) {
+        self.screen_width = screen_width;
+        self.screen_height = screen_height;
+        
+        for screen in self.screens.values_mut() {
+            screen.recompute_layout(screen_width, screen_height);
+        }
+    }
 }
 
 pub struct UiScreen<Msg: Clone> {
@@ -108,6 +151,7 @@ impl<Msg: Clone> UiScreen<Msg> {
     pub fn new(root: UiNode<Msg>, screen_width: f32, screen_height: f32) -> Self {
         let mut tree = TaffyTree::new();
         let root_node = compute_layout(&mut tree, &root);
+
         tree.compute_layout(
             root_node,
             Size { 
@@ -137,12 +181,6 @@ impl<Msg: Clone> UiScreen<Msg> {
 
     pub fn nodes(&self) -> &[(UiNode<Msg>, Vec2)] {
         &self.cached_nodes
-    }
-}
-
-impl<Msg: Clone, K: Hash + Eq> UiManager<K, Msg> {
-    pub fn add_screen(&mut self, label: K, screen: UiScreen<Msg>) {
-        self.screens.insert(label, screen);
     }
 }
 

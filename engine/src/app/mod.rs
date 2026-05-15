@@ -1,8 +1,8 @@
 use glam::UVec2;
 use glfw::{Glfw, PWindow, WindowEvent};
-use flecs_ecs::prelude::World;
+use flecs_ecs::{core::WorldGet, prelude::World};
 
-use crate::{app::{helper::{GameLoopCallbacks, game_loop}, window::{Events, WindowController, WindowDescriptor, WindowMode}}, error::GameError, render::{RenderDevice, error::RenderError}};
+use crate::{app::{helper::{GameLoopCallbacks, game_loop}, window::{Events, WindowController, WindowDescriptor, WindowMode, WindowSize}}, error::GameError, render::{RenderDevice, error::RenderError}};
 
 pub mod base;
 pub mod helper;
@@ -56,6 +56,10 @@ impl<G> App<G> {
         glfw.window_hint(glfw::WindowHint::ClientApi(glfw::ClientApiHint::NoApi));
 
         let world = World::new();
+        world.set(WindowSize {
+            width: desc.width as f32,
+            height: desc.height as f32,
+        });
 
         let (mut window, events) = glfw.with_primary_monitor(|glfw, m| {
             glfw.create_window(
@@ -125,6 +129,10 @@ impl<G: Game + 'static> App<G> {
                     match e {
                         WindowEvent::FramebufferSize(w, h) => {
                             g.game.render_device.resize_with(UVec2::new(*w as u32, *h as u32));
+                            g.game.world.get::<&mut WindowSize>(|wsize| {
+                                wsize.width = *w as f32;
+                                wsize.height = *h as f32;
+                            });
                         }
                         // Other events
                         _ => {}
