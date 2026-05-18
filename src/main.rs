@@ -109,7 +109,7 @@ impl Game for KvantumaGame {
         world.get::<&WindowSize>(|wsize| {
             self.ui_manager.add_screen(ScreenKey::MainMenu, UiScreen::new(
                 row(vec![
-                    col(6, vec![]),
+                    col(2, vec![]),
                     col(6, vec![
                         text("KVΛNTUMA".to_owned()),
                         button("New Game".to_owned(), None),
@@ -422,44 +422,41 @@ fn ui_system(
     wsize: &WindowSize,
     world: &World,
 ) {
-    for entity_id in ui.entities() {
-        world.entity_from_id(*entity_id).destruct();
-    }
-    ui.entities_mut().clear();
+    if ui.entities().is_empty() {
+        match state {
+            GameState::MainMenu(_mm_data) => {
+                let mut entities = vec![];
 
-    match state {
-        GameState::MainMenu(_mm_data) => {
-            let mut entities = vec![];
-
-            if let Some(screen) = ui.get_screen(ScreenKey::MainMenu) {
-                let nodes = screen.nodes();
-                
-                for (node, pos) in nodes {
-                    use crate::ui::{UiNode, UiText, UiButton, UiPosition};
+                if let Some(screen) = ui.get_screen(ScreenKey::MainMenu) {
+                    let nodes = screen.nodes();
                     
-                    let screen_pos = Vec2::new(pos.x, wsize.height - pos.y);
-                    
-                    let entity = match node {
-                        UiNode::Text { value, .. } => {
-                            world.entity()
-                                .set(UiText { value: value.to_string(), font_size: 32 })
-                                .set(UiPosition { screen_pos })
-                        }
-                        UiNode::Button { text, .. } => {
-                            world.entity()
-                                .set(UiButton { text: text.to_string(), font_size: 32 })
-                                .set(UiPosition { screen_pos })
-                        }
-                        _ => continue,
-                    };
-                    
-                    entities.push(entity.id());
+                    for (node, pos) in nodes {
+                        use crate::ui::{UiNode, UiText, UiButton, UiPosition};
+                        
+                        let screen_pos = Vec2::new(pos.x, wsize.height - pos.y);
+                        
+                        let entity = match node {
+                            UiNode::Text { value, .. } => {
+                                world.entity()
+                                    .set(UiText { value: value.to_string(), font_size: 32 })
+                                    .set(UiPosition { screen_pos })
+                            }
+                            UiNode::Button { text, .. } => {
+                                world.entity()
+                                    .set(UiButton { text: text.to_string(), font_size: 32 })
+                                    .set(UiPosition { screen_pos })
+                            }
+                            _ => continue,
+                        };
+                        
+                        entities.push(entity.id());
+                    }
                 }
-            }
 
-            ui.entities_mut().extend(entities);
+                ui.entities_mut().extend(entities);
+            }
+            _ => {}
         }
-        _ => {}
     }
 }
 
@@ -469,36 +466,42 @@ fn text_rendering_system(
     font: &MainFont,
     render_device: &mut RenderDevice,
 ) {
-    world.query::<(&crate::ui::UiText, &crate::ui::UiPosition)>()
+    world.query::<(&crate::ui::UiText, &crate::ui::UiPosition, Option<&Mesh<GlyphVertex>>)>()
         .build()
-        .each_entity(|entity, (ui_text, ui_pos)| {
-            let atlas = registry.get_atlas(font.0, ui_text.font_size).unwrap();
-            let mesh = atlas.generate_mesh(&ui_text.value, Vec2::ZERO, 1.0);
+        .each_entity(|entity, (ui_text, ui_pos, existing_mesh)| {
+            if existing_mesh.is_none() {
+                let atlas = registry.get_atlas(font.0, ui_text.font_size).unwrap();
+                let mesh = atlas.generate_mesh(&ui_text.value, Vec2::ZERO, 1.0);
+                
+                entity
+                    .set(TextMaterial { atlas: atlas.texture() })
+                    .set(updated(mesh, render_device, registry));
+            }
             
-            entity
-                .set(TextMaterial { atlas: atlas.texture() })
-                .set(updated(mesh, render_device, registry))
-                .set(Transform {
-                    translation: Vec3::new(ui_pos.screen_pos.x, ui_pos.screen_pos.y, 0.0),
-                    scale: Vec3::ONE,
-                    rotation: Quat::IDENTITY,
-                });
+            entity.set(Transform {
+                translation: Vec3::new(ui_pos.screen_pos.x, ui_pos.screen_pos.y, 0.0),
+                scale: Vec3::ONE,
+                rotation: Quat::IDENTITY,
+            });
         });
     
-    world.query::<(&crate::ui::UiButton, &crate::ui::UiPosition)>()
+    world.query::<(&crate::ui::UiButton, &crate::ui::UiPosition, Option<&Mesh<GlyphVertex>>)>()
         .build()
-        .each_entity(|entity, (ui_button, ui_pos)| {
-            let atlas = registry.get_atlas(font.0, ui_button.font_size).unwrap();
-            let mesh = atlas.generate_mesh(&ui_button.text, Vec2::ZERO, 1.0);
+        .each_entity(|entity, (ui_button, ui_pos, existing_mesh)| {
+            if existing_mesh.is_none() {
+                let atlas = registry.get_atlas(font.0, ui_button.font_size).unwrap();
+                let mesh = atlas.generate_mesh(&ui_button.text, Vec2::ZERO, 1.0);
+                
+                entity
+                    .set(TextMaterial { atlas: atlas.texture() })
+                    .set(updated(mesh, render_device, registry));
+            }
             
-            entity
-                .set(TextMaterial { atlas: atlas.texture() })
-                .set(updated(mesh, render_device, registry))
-                .set(Transform {
-                    translation: Vec3::new(ui_pos.screen_pos.x, ui_pos.screen_pos.y, 0.0),
-                    scale: Vec3::ONE,
-                    rotation: Quat::IDENTITY,
-                });
+            entity.set(Transform {
+                translation: Vec3::new(ui_pos.screen_pos.x, ui_pos.screen_pos.y, 0.0),
+                scale: Vec3::ONE,
+                rotation: Quat::IDENTITY,
+            });
         });
 }
 

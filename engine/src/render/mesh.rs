@@ -1,6 +1,6 @@
 use bytemuck::{Pod, Zeroable};
 use flecs_ecs::macros::Component;
-use glam::{Vec2, Vec3};
+use glam::{Vec2, Vec3, Vec4};
 
 use super::{Drawable, RenderDevice, buffer::BufferHandle, registry::RenderRegistry, types::*};
 
@@ -24,6 +24,44 @@ impl Vertex {
             array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: Self::ATTRIBS,
+        }
+    }
+}
+
+#[derive(Pod, Zeroable, Clone, Copy, Debug)]
+#[repr(C)]
+pub struct SkinnedVertex {
+    pub position: Vec3,
+    pub normal: Vec3,
+    pub texcoord: Vec2,
+    pub joint_indices: Vec4,
+    pub joint_weights: Vec4,
+}
+
+impl SkinnedVertex {
+    const ATTRIBS: &[wgpu::VertexAttribute] = &wgpu::vertex_attr_array![
+        0 => Float32x3,
+        1 => Float32x3,
+        2 => Float32x2,
+        3 => Float32x4,
+        4 => Float32x4,
+    ];
+
+    pub fn vertex_buffer_layout() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<SkinnedVertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: Self::ATTRIBS,
+        }
+    }
+
+    pub fn from_vertex(vertex: Vertex) -> Self {
+        Self {
+            position: vertex.position,
+            normal: vertex.normal,
+            texcoord: vertex.texcoord,
+            joint_indices: Vec4::ZERO,
+            joint_weights: Vec4::new(1.0, 0.0, 0.0, 0.0),
         }
     }
 }

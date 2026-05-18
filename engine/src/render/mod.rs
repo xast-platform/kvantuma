@@ -16,6 +16,7 @@ pub mod draw_context;
 pub mod shader_resource;
 pub mod mesh;
 pub mod camera;
+pub mod animation;
 
 pub mod types {
     pub use wgpu::{
