@@ -43,7 +43,7 @@ use crate::{
         camera::update_camera_buffer,
         ui::render_ui_text,
     },
-    ui::{Ui, UiManager, UiScreen, key::ScreenKey},
+    ui::{Ui, UiManager, UiScreen, components::KirText, key::ScreenKey},
 };
 
 #[derive(Component)]
@@ -119,13 +119,16 @@ impl Game for KvantumaGame {
         let ui_root = test_ui.build_ui(world);
         self.ui_manager.add_screen(ScreenKey::MainMenu, UiScreen::new(ui_root));
         self.ui_manager.set_screen(ScreenKey::MainMenu);
+        
+        let size = render_device.size();
+        self.ui_manager.recompute_layout(world, size.x as f32, size.y as f32);
 
         Ok(())
     }
 
     fn update(&mut self, world: &mut World) -> anyhow::Result<()> {
         self.movement_system(world);
-        
+
         Ok(())
     }
 
@@ -150,11 +153,10 @@ impl Game for KvantumaGame {
 
     fn render(&mut self, world: &mut World, render_device: &mut RenderDevice) -> Result<(), RenderError> {
         if self.ui_manager.is_dirty() {
-            let screen_width = self.ui_manager.screen_width();
-            let screen_height = self.ui_manager.screen_height();
+            let size = render_device.size();
+            self.ui_manager.recompute_layout(world, size.x as f32, size.y as f32);
             
-            if let Some(screen) = self.ui_manager.get_current_screen_mut() {
-                screen.recompute_layout(world, screen_width, screen_height);
+            if let Some(screen) = self.ui_manager.get_current_screen() {
                 screen.apply_layout_to_entities(world);
             }
             
@@ -318,13 +320,15 @@ impl KvantumaGame {
     fn resize(&mut self, world: &mut World, width: &i32, height: &i32) {
         let w = *width as f32;
         let h = *height as f32;
+        
         world.each::<(&mut OrthographicCamera, &Camera)>(|(ort_cam, _cam)| {
             ort_cam.resize_viewport(w, h);
         });
         world.each::<(&mut PerspectiveCamera, &Camera)>(|(persp_cam, _cam)| {
             persp_cam.set_aspect(w / h);
         });
-        self.ui_manager.recompute_layout(world, w, h);
+        
+        self.ui_manager.mark_dirty();
     }
 
     fn init_skybox(
@@ -487,7 +491,7 @@ pub struct MyUi;
 
 impl Ui for MyUi {
     fn build_ui(&self, world: &mut World) -> Entity {
-        ui!(world,
+        ui! { world,
             row {
                 col (6) {
                     text("A")
@@ -499,6 +503,6 @@ impl Ui for MyUi {
                     text("E")
                 }
             }
-        )
+        }
     }
 }

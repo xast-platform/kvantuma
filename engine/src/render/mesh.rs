@@ -66,13 +66,24 @@ impl SkinnedVertex {
     }
 }
 
-#[derive(Default, Debug, Component)]
+#[derive(Debug, Component)]
 pub struct Mesh<V: Send + Sync + 'static> {
     pub vertices: Vec<V>,
     pub indices: Vec<u32>,
 
     pub vertex_buffer: Option<BufferHandle>,
     pub index_buffer: Option<BufferHandle>,
+}
+
+impl<V: Send + Sync + 'static> Default for Mesh<V> {
+    fn default() -> Self {
+        Mesh { 
+            vertices: vec![], 
+            indices: vec![], 
+            vertex_buffer: None, 
+            index_buffer: None,
+         }
+    }
 }
 
 impl<V: Send + Sync + 'static> Mesh<V> {

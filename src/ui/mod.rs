@@ -83,6 +83,7 @@ impl<K: Hash + Eq + Copy> UiManager<K> {
     }
 
     pub fn recompute_layout(&mut self, world: &World, screen_width: f32, screen_height: f32) {
+
         self.screen_width = screen_width;
         self.screen_height = screen_height;
         
@@ -186,7 +187,7 @@ fn compute_layout(
     let mut children_vec = Vec::new();
     let mut col_number = 0u8;
     
-    entity.get::<(Option<&EcsRow>, Option<&EcsCol>, Option<&EcsText>)>(|(row_opt, col_opt, text_opt)| {
+    entity.get::<(Option<&KirRow>, Option<&KirCol>, Option<&KirText>)>(|(row_opt, col_opt, text_opt)| {
         if let Some(row) = row_opt {
             is_row = true;
             children_vec = row.children.clone();

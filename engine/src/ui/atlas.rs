@@ -5,7 +5,7 @@ use glam::Vec2;
 use image::{GrayImage, Luma};
 use slotmap::new_key_type;
 
-use crate::render::{mesh::Mesh, texture::TextureHandle};
+use crate::render::{Drawable, RenderDevice, mesh::Mesh, registry::RenderRegistry, texture::TextureHandle};
 
 pub const PADDING: u32 = 2;
 pub const CHARSET: &str = " ^ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,;:!()";
@@ -218,7 +218,12 @@ impl Atlas {
         &self.image
     }
 
-    pub fn generate_mesh(&self, text: &str, start: Vec2, horizontal_spacing: f32) -> Mesh<GlyphVertex> {
+    fn generate_mesh_inner(
+        &self, 
+        text: &str, 
+        start: Vec2, 
+        horizontal_spacing: f32,
+    ) -> (Vec<GlyphVertex>, Vec<u32>) {
         let mut vertices = Vec::with_capacity(text.len() * 4);
         let mut indices = Vec::with_capacity(text.len() * 6);
         let mut cursor_x = start[0];
@@ -257,6 +262,47 @@ impl Atlas {
             }
         }
 
-        Mesh::new(vertices, indices)
+        (vertices, indices)
+    }
+
+    pub fn generate_mesh(
+        &self, 
+        text: &str, 
+        start: Vec2, 
+        horizontal_spacing: f32,
+    ) -> Mesh<GlyphVertex> {
+        let (vertices, indices) = self.generate_mesh_inner(
+            text, 
+            start, 
+            horizontal_spacing,
+        );
+
+        Mesh {
+            vertices,
+            indices,
+            
+            vertex_buffer: None,
+            index_buffer: None,
+        }
+    }
+
+    pub fn generate_mesh_in(
+        &self, 
+        mesh: &mut Mesh<GlyphVertex>,
+        render_device: &mut RenderDevice,
+        registry: &mut RenderRegistry,
+        text: &str, 
+        start: Vec2, 
+        horizontal_spacing: f32,
+    ) {
+        let (vertices, indices) = self.generate_mesh_inner(
+            text, 
+            start, 
+            horizontal_spacing,
+        );
+
+        mesh.vertices = vertices;
+        mesh.indices = indices;
+        mesh.update(render_device, registry);
     }
 }
