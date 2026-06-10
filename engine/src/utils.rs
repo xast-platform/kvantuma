@@ -1,4 +1,5 @@
 use anyhow::{Context, Result, bail};
+use glam::Vec2;
 use image::GenericImageView;
 use std::fs;
 
@@ -98,4 +99,13 @@ pub struct Rect {
 	pub y: f32,
 	pub w: f32,
 	pub h: f32,
+}
+
+impl Rect {
+	pub const fn contains(&self, position: Vec2) -> bool {
+		position.x >= self.x
+			&& position.x <= self.x + self.w
+			&& position.y >= self.y
+			&& position.y <= self.y + self.h
+	}
 }

@@ -95,6 +95,12 @@ struct KvantumaGame {
     ort_cam_id: Entity,
     persp_cam_id: Entity,
     ui_manager: KvUiManager,
+    current_event: Vec<UiEvent>,
+}
+
+pub enum UiEvent {
+    Enter(Entity),
+    Exit(Entity),
 }
 
 impl Game for KvantumaGame {
@@ -181,6 +187,30 @@ impl Game for KvantumaGame {
         let canvases: &[&dyn RenderSurface] = &[&canvas];
         let mut ctx = render_device.draw_ctx();
 
+        for event in &self.current_event {
+            match event {
+                UiEvent::Enter(enter) => {
+                    world.entity_from_id(*enter)
+                        .get::<Option<&mut TextMaterial>>(|mat| {
+                            if let Some(mat) = mat {
+                                println!("Enter text");
+                                mat.update_color(Vec3::X, render_device, &mut self.registry);
+                            }
+                        })
+                },
+                UiEvent::Exit(exit) => {
+                    world.entity_from_id(*exit)
+                        .get::<Option<&mut TextMaterial>>(|mat| {
+                            if let Some(mat) = mat {
+                                println!("Exit text");
+                                mat.update_color(Vec3::ONE, render_device, &mut self.registry);
+                            }
+                        })
+                },
+            }
+        }
+        self.current_event.clear();
+
         self.render_skybox(world, render_device, canvases, &mut ctx);
         self.render_color(world, render_device, canvases, &mut ctx);
         self.render_ui_text(world, render_device, canvases, &mut ctx);
@@ -244,19 +274,10 @@ impl KvantumaGame {
                 mouse.last_pos = Some(current_pos);
             } else {
                 // Move cursor
-                self.ui_manager.hit_test(
+                self.current_event = self.ui_manager.hit_test(
                     current_pos,
-                    |enter| {
-                        world.entity_from_id(*enter)
-                            .get::<Option<&KirText>>(|text| {
-                                if let Some(text) = text {
-                                    println!("Selected: {}", text.value);
-                                }
-                            })
-                    },
-                    |exit| {
-                        // log::info!("Exit entity: {exit}");
-                    }
+                    UiEvent::Enter,
+                    UiEvent::Exit,
                 );
             }
         });
@@ -524,6 +545,7 @@ fn main() -> anyhow::Result<()> {
             ort_cam_id: Entity::null(),
             persp_cam_id: Entity::null(),
             ui_manager: KvUiManager::new(1024.0, 1024.0),
+            current_event: vec![],
         },
     )?.run();
 

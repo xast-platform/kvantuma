@@ -24,7 +24,7 @@ pub fn render_ui_text(
                     let mesh = atlas.generate_mesh(&text.value, Vec2::ZERO, 1.0);
 
                     entity
-                        .set(TextMaterial { atlas: atlas.texture() })
+                        .set(TextMaterial::new(Vec3::ONE, atlas.texture(), render_device, registry))
                         .set(updated(mesh, render_device, registry));
                 }
             });

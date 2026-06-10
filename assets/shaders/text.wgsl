@@ -1,11 +1,10 @@
 // Material
 @group(0) @binding(0) var atlas: texture_2d<f32>;
 @group(0) @binding(1) var atlas_sampler: sampler;
+@group(0) @binding(2) var<uniform> text_color: vec3<f32>;
 
 // Camera
 @group(1) @binding(0) var<uniform> cam_uniform: CameraUniform;
-
-const text_color: vec3<f32> = vec3<f32>(1.0);
 
 struct CameraUniform {
     position: vec3<f32>,

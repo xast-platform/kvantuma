@@ -10,6 +10,11 @@ pub mod key;
 pub mod msg;
 pub mod components;
 
+pub struct UiRect {
+    entity: Entity,
+    rect: Rect,
+}
+
 #[derive(Component)]
 pub struct DebugUi;
 
@@ -42,24 +47,26 @@ impl<K: Hash + Eq + Copy> UiManager<K> {
         }
     }
 
-    pub fn hit_test(
+    pub fn hit_test<T>(
         &mut self,
         position: Vec2,
-        enter_fn: impl FnOnce(Entity),
-        exit_fn: impl FnOnce(Entity),
-    ) {
+        enter_fn: impl FnOnce(Entity) -> T,
+        exit_fn: impl FnOnce(Entity) -> T,
+    ) -> Vec<T> {
         let hovered = self.hit_test_inner(position);
+        let mut res = vec![];
 
         if hovered != self.hovered {
             if let Some(previous) = self.hovered {
-                enter_fn(previous);
+                res.push(exit_fn(previous));
             }
             if let Some(current) = hovered {
-                exit_fn(current);
+                res.push(enter_fn(current));
             }
         }
 
         self.hovered = hovered;
+        res
     }
 
     pub fn debug_rects(
@@ -88,7 +95,7 @@ impl<K: Hash + Eq + Copy> UiManager<K> {
         world.delete_entities_with(DebugUi);
 
         if let Some(screen) = self.get_current_screen() {
-            for rect in screen.entity_rects.values() {
+            for UiRect { rect, .. } in &screen.entity_rects {
                 world.entity()
                     .set(updated(
                         Mesh::outline_rect_mesh(*rect, thickness), 
@@ -102,15 +109,12 @@ impl<K: Hash + Eq + Copy> UiManager<K> {
         }
     }
 
-    fn hit_test_inner(&self, position: Vec2) -> Option<Entity> {
+    fn hit_test_inner(&self, mut position: Vec2) -> Option<Entity> {
         let screen = self.get_current_screen()?;
+        position.y = self.screen_height - position.y;
 
-        for (entity, rect) in &screen.entity_rects {
-            if position.x >= rect.x
-                && position.x <= rect.x + rect.w
-                && position.y >= rect.y
-                && position.y <= rect.y + rect.h
-            {
+        for UiRect { entity, rect } in screen.entity_rects.iter().rev() {
+            if rect.contains(position) {
                 return Some(*entity);
             }
         }
@@ -177,12 +181,12 @@ impl<K: Hash + Eq + Copy> UiManager<K> {
     }
 }
 
-pub struct UiScreen{
+pub struct UiScreen {
     tree: TaffyTree<()>,
     node: Option<NodeId>,
     root: Entity,
     entity_to_node: HashMap<Entity, NodeId>,
-    entity_rects: HashMap<Entity, Rect>,
+    entity_rects: Vec<UiRect>,
     screen_height: f32,
 }
 
@@ -193,7 +197,7 @@ impl UiScreen {
             node: None,
             root,
             entity_to_node: HashMap::new(),
-            entity_rects: HashMap::new(),
+            entity_rects: Vec::new(),
             screen_height: 0.0,
         }
     }
@@ -221,6 +225,8 @@ impl UiScreen {
     }
 
     pub fn apply_layout_to_entities(&mut self, world: &World) {
+        self.entity_rects.clear();
+
         if let Some(root_node) = self.node {
             self.apply_layout_recursive(world, root_node, 0.0, 0.0);
         }
@@ -242,7 +248,10 @@ impl UiScreen {
                         h: layout.size.height,
                     };
 
-                    self.entity_rects.insert(*entity, rect);
+                    self.entity_rects.push(UiRect {
+                        entity: *entity,
+                        rect,
+                    });
 
                     world.entity_from_id(*entity).set(UiPosition {
                         x: abs_x,
