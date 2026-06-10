@@ -1,12 +1,17 @@
 use std::{collections::HashMap, hash::Hash};
 
+use glam::{Vec2, Vec3};
 use taffy::{AlignItems, AvailableSpace, Dimension, FlexDirection, JustifyContent, LengthPercentage, NodeId, Size, Style as TaffyStyle, TaffyTree};
 use flecs_ecs::prelude::*;
 use components::*;
+use xastge::{Transform, render::{RenderDevice, material::ColorUiMaterial, mesh::{Mesh, UiVertex}, registry::RenderRegistry, updated}, utils::Rect};
 
 pub mod key;
 pub mod msg;
 pub mod components;
+
+#[derive(Component)]
+pub struct DebugUi;
 
 #[derive(Clone, Default)]
 pub struct Style {
@@ -22,6 +27,7 @@ pub struct UiManager<K> {
     screen_width: f32,
     screen_height: f32,
     dirty: bool,
+    hovered: Option<Entity>,
 }
 
 impl<K: Hash + Eq + Copy> UiManager<K> {
@@ -32,7 +38,84 @@ impl<K: Hash + Eq + Copy> UiManager<K> {
             screen_width,
             screen_height,
             dirty: true,
+            hovered: None,
         }
+    }
+
+    pub fn hit_test(
+        &mut self,
+        position: Vec2,
+        enter_fn: impl FnOnce(Entity),
+        exit_fn: impl FnOnce(Entity),
+    ) {
+        let hovered = self.hit_test_inner(position);
+
+        if hovered != self.hovered {
+            if let Some(previous) = self.hovered {
+                enter_fn(previous);
+            }
+            if let Some(current) = hovered {
+                exit_fn(current);
+            }
+        }
+
+        self.hovered = hovered;
+    }
+
+    pub fn debug_rects(
+        &self, 
+        world: &mut World, 
+        registry: &mut RenderRegistry,
+        render_device: &mut RenderDevice, 
+        color: Vec3,
+        thickness: f32,
+    ) {
+        world.query::<(&Mesh<UiVertex>, &ColorUiMaterial)>()
+            .with(DebugUi)
+            .build()
+            .each(|(mesh, mat)| {
+                if let Some(ib) = mesh.index_buffer {
+                    registry.remove_buffer(ib);
+                }
+
+                if let Some(vb) = mesh.vertex_buffer {
+                    registry.remove_buffer(vb);
+                }
+
+                registry.remove_buffer(mat.color_buffer);
+            });
+
+        world.delete_entities_with(DebugUi);
+
+        if let Some(screen) = self.get_current_screen() {
+            for rect in screen.entity_rects.values() {
+                world.entity()
+                    .set(updated(
+                        Mesh::outline_rect_mesh(*rect, thickness), 
+                        render_device, 
+                        registry
+                    ))
+                    .set(Transform::default())
+                    .set(ColorUiMaterial::new(color, render_device, registry))
+                    .add(DebugUi);
+            }
+        }
+    }
+
+    fn hit_test_inner(&self, position: Vec2) -> Option<Entity> {
+        let screen = self.get_current_screen()?;
+
+        for (entity, rect) in &screen.entity_rects {
+            if position.x >= rect.x
+                && position.x <= rect.x + rect.w
+                && position.y >= rect.y
+                && position.y <= rect.y + rect.h
+            {
+                return Some(*entity);
+            }
+        }
+
+        None
     }
     
     pub fn set_screen(&mut self, screen: K) {
@@ -83,7 +166,6 @@ impl<K: Hash + Eq + Copy> UiManager<K> {
     }
 
     pub fn recompute_layout(&mut self, world: &World, screen_width: f32, screen_height: f32) {
-
         self.screen_width = screen_width;
         self.screen_height = screen_height;
         
@@ -100,6 +182,7 @@ pub struct UiScreen{
     node: Option<NodeId>,
     root: Entity,
     entity_to_node: HashMap<Entity, NodeId>,
+    entity_rects: HashMap<Entity, Rect>,
     screen_height: f32,
 }
 
@@ -110,6 +193,7 @@ impl UiScreen {
             node: None,
             root,
             entity_to_node: HashMap::new(),
+            entity_rects: HashMap::new(),
             screen_height: 0.0,
         }
     }
@@ -136,13 +220,13 @@ impl UiScreen {
         }
     }
 
-    pub fn apply_layout_to_entities(&self, world: &World) {
+    pub fn apply_layout_to_entities(&mut self, world: &World) {
         if let Some(root_node) = self.node {
             self.apply_layout_recursive(world, root_node, 0.0, 0.0);
         }
     }
 
-    fn apply_layout_recursive(&self, world: &World, node_id: NodeId, parent_x: f32, parent_y: f32) {
+    fn apply_layout_recursive(&mut self, world: &World, node_id: NodeId, parent_x: f32, parent_y: f32) {
         if let Ok(layout) = self.tree.layout(node_id) {
             let abs_x = parent_x + layout.location.x;
             let abs_y = parent_y + layout.location.y;
@@ -150,6 +234,16 @@ impl UiScreen {
             for (entity, entity_node_id) in &self.entity_to_node {
                 if *entity_node_id == node_id {
                     let screen_y = self.screen_height - abs_y - layout.size.height;
+
+                    let rect = Rect {
+                        x: abs_x,
+                        y: screen_y,
+                        w: layout.size.width,
+                        h: layout.size.height,
+                    };
+
+                    self.entity_rects.insert(*entity, rect);
+
                     world.entity_from_id(*entity).set(UiPosition {
                         x: abs_x,
                         y: screen_y,

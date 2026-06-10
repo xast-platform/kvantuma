@@ -5,7 +5,7 @@ use wgpu::include_wgsl;
 
 use crate::render::RenderDevice;
 use crate::render::buffer::{BufferHandle, BufferResourceDescriptor};
-use crate::render::mesh::Vertex;
+use crate::render::mesh::{UiVertex, Vertex};
 use crate::render::texture::{Texture, TextureDescriptor, TextureResourceDescriptor, TextureResourceUsage};
 
 use super::{shader_resource::{ShaderResource, ShaderResourceLayout}, registry::RenderRegistry, texture::TextureHandle};
@@ -263,5 +263,79 @@ impl Material for ColorMaterial {
                 render_device, 
                 &Self::shader_resource_layout(render_device),
             )
+    }
+}
+
+#[derive(Debug, Component)]
+pub struct ColorUiMaterial {
+    pub color: Vec3,
+    pub color_buffer: BufferHandle,
+}
+
+impl ColorUiMaterial {
+    pub fn new(
+        color: Vec3,
+        render_device: &RenderDevice,
+        registry: &mut RenderRegistry,
+    ) -> ColorUiMaterial {
+        let color_buffer = registry
+            .new_buffer::<Vec3>(render_device, 1, BufferUsages::UNIFORM)
+            .and_then_mut(registry, |b| b.fill(render_device, 0, &[color]));
+
+        ColorUiMaterial {
+            color,
+            color_buffer,
+        }
+    }
+
+    pub fn update_color(
+        &mut self,
+        new_color: Vec3,
+        render_device: &RenderDevice,
+        registry: &mut RenderRegistry,
+    ) {
+        self.color = new_color;
+        registry
+            .get_buffer(self.color_buffer)
+            .expect("Cannot update color buffer")
+            .fill_exact(render_device, 0, &[new_color])
+            .expect("Failed to update color buffer");
+    }
+}
+
+impl Material for ColorUiMaterial {
+    fn shader() -> ShaderModuleDescriptor<'static> {
+        include_wgsl!("../../../assets/shaders/color_ui.wgsl")
+    }
+
+    fn vertex_layout() -> Option<VertexBufferLayout<'static>> {
+        Some(UiVertex::vertex_buffer_layout())
+    }
+
+    fn shader_resource_layout(render_device: &RenderDevice) -> ShaderResourceLayout {
+        ShaderResourceLayout::builder()
+            .with_label("Color UI Material")
+            .with_buffer(&BufferResourceDescriptor {
+                visibility: ShaderStages::FRAGMENT,
+                buffer_type: BufferBindingType::Uniform,
+            })
+            .build(render_device)
+    }
+
+    fn shader_resource(
+        &self, 
+        render_device: &RenderDevice,
+        registry: &RenderRegistry,
+    ) -> ShaderResource {
+        ShaderResource::builder()
+            .with_buffer(registry.get_buffer(self.color_buffer).unwrap())
+            .build(
+                render_device, 
+                &Self::shader_resource_layout(render_device),
+            )
+    }
+
+    fn cull_mode() -> Option<Face> {
+        None
     }
 }

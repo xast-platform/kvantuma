@@ -82,6 +82,12 @@ impl RenderRegistry {
         self.buffers.get_mut(handle)
     }
 
+    pub fn remove_buffer(&mut self, handle: BufferHandle) {
+        if let Some(buff) = self.buffers.remove(handle) {
+            drop(buff);
+        }
+    }
+
     pub fn new_texture(
         &mut self,
         render_device: &RenderDevice,
@@ -149,6 +155,12 @@ impl RenderRegistry {
         self.textures.get_mut(handle)
     }
 
+    pub fn remove_texture(&mut self, handle: TextureHandle) {
+        if let Some(tex) = self.textures.remove(handle) {
+            drop(tex);
+        }
+    }
+
     pub fn new_font(&mut self, font: FontRef<'static>) -> FontHandle {
         self.fonts.insert(FontData::new(font))
     }
@@ -156,6 +168,12 @@ impl RenderRegistry {
     pub fn get_font(&self, handle: FontHandle) -> Option<&FontRef<'static>> {
         self.fonts.get(handle)
             .map(|d| &d.font)
+    }
+
+    pub fn remove_font(&mut self, handle: FontHandle) {
+        if let Some(font) = self.fonts.remove(handle) {
+            drop(font);
+        }
     }
 
     pub fn add_font_atlas(&mut self, render_device: &RenderDevice, handle: FontHandle, font_size: u32) {

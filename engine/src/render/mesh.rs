@@ -2,6 +2,8 @@ use bytemuck::{Pod, Zeroable};
 use flecs_ecs::macros::Component;
 use glam::{Vec2, Vec3, Vec4};
 
+use crate::utils::Rect;
+
 use super::{Drawable, RenderDevice, buffer::BufferHandle, registry::RenderRegistry, types::*};
 
 #[derive(Pod, Zeroable, Clone, Copy, Debug)]
@@ -11,6 +13,27 @@ pub struct Vertex {
     pub normal: Vec3,
     pub texcoord: Vec2,
 }
+
+#[derive(Pod, Zeroable, Clone, Copy, Debug)]
+#[repr(C)]
+pub struct UiVertex {
+    pub pos: Vec2,
+}
+
+impl UiVertex {
+    const ATTRIBS: &[wgpu::VertexAttribute] = &wgpu::vertex_attr_array![
+        0 => Float32x2,
+    ];
+
+    pub fn vertex_buffer_layout() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<UiVertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: Self::ATTRIBS,
+        }
+    }
+}
+
 
 impl Vertex {
     const ATTRIBS: &[wgpu::VertexAttribute] = &wgpu::vertex_attr_array![
@@ -149,6 +172,67 @@ impl Mesh<Vertex> {
             vertices,
             indices,
             
+            vertex_buffer: None,
+            index_buffer: None,
+        }
+    }
+}
+
+impl Mesh<UiVertex> {
+    pub fn outline_rect_mesh(rect: Rect, thickness: f32) -> Mesh<UiVertex> {
+        let x = rect.x;
+        let y = rect.y;
+        let w = rect.w;
+        let h = rect.h;
+        let t = thickness;
+
+        let vertices = vec![
+            // Top
+            UiVertex { pos: Vec2::new(x, y) },
+            UiVertex { pos: Vec2::new(x + w, y) },
+            UiVertex { pos: Vec2::new(x + w, y + t) },
+            UiVertex { pos: Vec2::new(x, y + t) },
+
+            // Bottom
+            UiVertex { pos: Vec2::new(x, y + h - t) },
+            UiVertex { pos: Vec2::new(x + w, y + h - t) },
+            UiVertex { pos: Vec2::new(x + w, y + h) },
+            UiVertex { pos: Vec2::new(x, y + h) },
+
+            // Left
+            UiVertex { pos: Vec2::new(x, y + t) },
+            UiVertex { pos: Vec2::new(x + t, y + t) },
+            UiVertex { pos: Vec2::new(x + t, y + h - t) },
+            UiVertex { pos: Vec2::new(x, y + h - t) },
+
+            // Right
+            UiVertex { pos: Vec2::new(x + w - t, y + t) },
+            UiVertex { pos: Vec2::new(x + w, y + t) },
+            UiVertex { pos: Vec2::new(x + w, y + h - t) },
+            UiVertex { pos: Vec2::new(x + w - t, y + h - t) },
+        ];
+
+        let indices = vec![
+            // Top
+            0, 1, 2,
+            0, 2, 3,
+
+            // Bottom
+            4, 5, 6,
+            4, 6, 7,
+
+            // Left
+            8, 9, 10,
+            8, 10, 11,
+
+            // Right
+            12, 13, 14,
+            12, 14, 15,
+        ];
+
+        Mesh {
+            vertices,
+            indices,
             vertex_buffer: None,
             index_buffer: None,
         }

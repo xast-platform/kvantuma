@@ -1,27 +1,15 @@
-use log::LevelFilter;
 use crate::{
-    Transform, 
-    app::{
-        App, Game,
-        window::{Action, CursorMode, Key, MouseButton, WindowController, WindowDescriptor, WindowEvent, WindowMode},
-    }, 
     render::{
-        RenderDevice, RenderSurface, 
-        camera::{Camera, CameraBuffer, OrthographicCamera, PerspectiveCamera}, 
-        error::RenderError, 
-        include_wgsl, 
-        material::{ColorMaterial, Material, SkyboxMaterial},
-        mesh::{Mesh, Vertex}, 
-        pass::DrawDescriptor,
+        RenderDevice, include_wgsl, 
+        material::Material,
         registry::RenderRegistry, 
         shader_resource::{ShaderResource, ShaderResourceLayout}, 
-        texture::{TextureDescriptor, TextureHandle, TextureResourceDescriptor, TextureResourceUsage}, 
-        types::*, updated,
+        texture::{TextureHandle, TextureResourceDescriptor, TextureResourceUsage}, 
+        types::*,
     }, 
-    ui::{
-        atlas::{FontHandle, GlyphVertex}, 
-        glyph::FontRef,
-    },
+    ui::
+        atlas::GlyphVertex
+    ,
 };
 
 use flecs_ecs::prelude::*;

@@ -11,8 +11,8 @@ use xastge::{
         RenderDevice, RenderSurface, 
         camera::{Camera, CameraBuffer, OrthographicCamera, PerspectiveCamera}, 
         error::RenderError, 
-        material::{ColorMaterial, SkyboxMaterial},
-        mesh::{Mesh, Vertex}, 
+        material::{ColorMaterial, ColorUiMaterial, SkyboxMaterial},
+        mesh::{Mesh, UiVertex, Vertex}, 
         pass::DrawDescriptor,
         registry::RenderRegistry,
         texture::TextureDescriptor, 
@@ -140,7 +140,7 @@ impl Game for KvantumaGame {
     ) -> anyhow::Result<()> {
         match event {
             WindowEvent::FramebufferSize(width, height) => self.resize(world, width, height),
-            WindowEvent::CursorPos(x, y) => self.rotate_cam(world, x, y),
+            WindowEvent::CursorPos(x, y) => self.process_cursor_pos(world, x, y),
             WindowEvent::Key(Key::Escape, _, Action::Press, _) => self.process_escape(world, window),
             WindowEvent::Key(key, _, action, _) => self.process_keys(world, key, action),
             WindowEvent::MouseButton(MouseButton::Button1, Action::Press, _) => self.process_mouse(world, window),
@@ -152,11 +152,19 @@ impl Game for KvantumaGame {
     }
 
     fn render(&mut self, world: &mut World, render_device: &mut RenderDevice) -> Result<(), RenderError> {
+        self.ui_manager.debug_rects(
+            world, 
+            &mut self.registry, 
+            render_device, 
+            Vec3::Y,
+            2.0,
+        );
+        
         if self.ui_manager.is_dirty() {
             let size = render_device.size();
             self.ui_manager.recompute_layout(world, size.x as f32, size.y as f32);
             
-            if let Some(screen) = self.ui_manager.get_current_screen() {
+            if let Some(screen) = self.ui_manager.get_current_screen_mut() {
                 screen.apply_layout_to_entities(world);
             }
             
@@ -218,25 +226,39 @@ impl KvantumaGame {
         });
     }
 
-    fn rotate_cam(&self, world: &mut World, x: &f64, y: &f64) {
-        let current = Vec2::new(*x as f32, *y as f32);
+    fn process_cursor_pos(&mut self, world: &mut World, x: &f64, y: &f64) {
+        let current_pos = Vec2::new(*x as f32, *y as f32);
         world.get::<&mut MouseState>(|mouse| {
-            if !mouse.captured {
-                return;
+            if mouse.captured {
+                // Rotate camera
+                if let Some(last) = mouse.last_pos {
+                    let delta = current_pos - last;
+
+                    world.each::<(&mut FpsCamera,)>(|(fps,)| {
+                        fps.yaw   -= delta.x * fps.sensitivity;
+                        fps.pitch -= delta.y * fps.sensitivity;
+                        fps.pitch = fps.pitch.clamp(-1.54, 1.54);
+                    });
+                }
+
+                mouse.last_pos = Some(current_pos);
+            } else {
+                // Move cursor
+                self.ui_manager.hit_test(
+                    current_pos,
+                    |enter| {
+                        world.entity_from_id(*enter)
+                            .get::<Option<&KirText>>(|text| {
+                                if let Some(text) = text {
+                                    println!("Selected: {}", text.value);
+                                }
+                            })
+                    },
+                    |exit| {
+                        // log::info!("Exit entity: {exit}");
+                    }
+                );
             }
-
-            if let Some(last) = mouse.last_pos {
-                let delta = current - last;
-
-                world.each::<(&mut FpsCamera,)>(|(fps,)| {
-                    fps.yaw   -= delta.x * fps.sensitivity;
-                    fps.pitch -= delta.y * fps.sensitivity;
-
-                    fps.pitch = fps.pitch.clamp(-1.54, 1.54);
-                });
-            }
-
-            mouse.last_pos = Some(current);
         });
     }
 
@@ -244,6 +266,7 @@ impl KvantumaGame {
         let camera_layout = CameraBuffer::layout(render_device);
 
         self.registry.register_material::<TextMaterial>(render_device, &[&camera_layout]);
+        self.registry.register_material::<ColorUiMaterial>(render_device, &[&camera_layout]);
         self.registry.register_material::<ColorMaterial>(render_device, &[&camera_layout]);
         self.registry.register_material::<SkyboxMaterial>(render_device, &[&camera_layout]);
     }
@@ -288,6 +311,27 @@ impl KvantumaGame {
                         drawable: Some(mesh),
                         instance_data: Some(t),
                         global_shader_resources: &[cam_buffer.resource()],
+                        material: mat,
+                    });
+                });
+        });
+
+        world.each::<(&Mesh<UiVertex>, &ColorUiMaterial, &Transform)>(|(mesh, mat, t)| {
+            world
+                .entity_from_id(self.ort_cam_id)
+                .get::<(&CameraBuffer, &OrthographicCamera)>(|(ui_cam_buffer, _)| {
+                    let mut render_pass = ctx.render_pass(
+                        canvases, 
+                        render_device.depth_texture(),
+                        Operations {
+                            load: LoadOp::Load,
+                            store: StoreOp::Store,
+                        },
+                    );
+                    render_pass.draw(render_device, &self.registry, DrawDescriptor::<_, _> {
+                        drawable: Some(mesh),
+                        instance_data: Some(t),
+                        global_shader_resources: &[ui_cam_buffer.resource()],
                         material: mat,
                     });
                 });
@@ -494,7 +538,7 @@ impl Ui for MyUi {
         ui! { world,
             row {
                 col (6) {
-                    text("A")
+                    text("AGGAGAGAGJJJJ")
                     text("B")
                 }
                 col (6) {

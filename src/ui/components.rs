@@ -42,44 +42,31 @@ pub struct NinePatch {
 }
 
 /// ```text
-///            left_top_w   center_top_w  right_top_w               
-///                    │        │          │                        
-///                    │        │          │                        
-///                 ┌──▼─────┐ ┌▼┐ ┌───────▼─┐                      
-///                 │        │ │ │ │         │                      
-///                 │        │ │ │ │         ◄───────right_top_h    
-///                 │        │ │ │ │         │                      
-///                 │        │ │ │ │         │                      
-///                 └────────┘ └─┘ └─────────┘                      
-/// left_middle_w───────┐       ┌────────────────────center_middle_w
-///                 ┌───▼────┐ ┌▼┐ ┌─────────┐                      
-///                 │        │ │ │ │         ◄───────right_middle_h 
-///                 └────────┘ └─┘ └────▲────┘                      
-/// left_bottom_w───────┐               └────────────right_middle_w 
-///                 ┌───▼────┐ ┌─┐ ┌─────────┐                      
-///                 │        │ │ │ │         │                      
-///                 │        │ │ │ │         ◄───────right_bottom_h 
-///                 │        │ │ │ │         │                      
-///                 │        │ │ │ │         │                      
-///                 └────────┘ └▲┘ └────▲────┘                      
-/// center_bottom_w─────────────┘       └────────────right_bottom_w 
+///       left     right                  
+///         │        │                    
+///         │        │                    
+/// ┌───────┼──┬──┬──┼───────┐            
+/// │       │  │  │  │       │            
+/// │       │  │  │  │       │            
+/// │       └─►│  │  │       │            
+/// │          │  │◄─┘  ┌────┼──────top   
+/// │          │  │     ▼    │            
+/// ├──────────┼──┼──────────┤            
+/// │          │  │          │            
+/// ├──────────┼──┼──────────┤            
+/// │          │  │       ▲  │            
+/// │          │  │       └──┼──────bottom
+/// │          │  │          │            
+/// │          │  │          │            
+/// │          │  │          │            
+/// └──────────┴──┴──────────┘            
 /// ```
 #[derive(Serialize, Deserialize)]
 pub struct NinePatchConfig {
-    pub left_top_w: u16,
-    pub center_top_w: u16,
-    pub right_top_w: u16,
-    pub right_top_h: u16,
-
-    pub left_middle_w: u16,
-    pub center_middle_w: u16,
-    pub right_middle_w: u16,
-    pub right_middle_h: u16,
-
-    pub left_bottom_w: u16,
-    pub center_bottom_w: u16,
-    pub right_bottom_w: u16,
-    pub right_bottom_h: u16,
+    pub left: u16,
+    pub right: u16,
+    pub top: u16,
+    pub bottom: u16,
 }
 
 pub fn col(world: &World, num: u8, entities: &[Entity]) -> Entity {
