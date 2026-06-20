@@ -43,7 +43,7 @@ use crate::{
         camera::update_camera_buffer,
         ui::render_ui_text,
     },
-    ui::{Ui, UiManager, UiScreen, components::KirText, key::ScreenKey},
+    ui::{Ui, UiManager, UiScreen, key::ScreenKey},
 };
 
 #[derive(Component)]
@@ -127,7 +127,9 @@ impl Game for KvantumaGame {
         self.ui_manager.set_screen(ScreenKey::MainMenu);
         
         let size = render_device.size();
-        self.ui_manager.recompute_layout(world, size.x as f32, size.y as f32);
+
+        let atlas = self.registry.get_atlas(font, 24).unwrap();
+        self.ui_manager.recompute_layout(world, size.x as f32, size.y as f32, atlas);
 
         Ok(())
     }
@@ -168,13 +170,13 @@ impl Game for KvantumaGame {
         
         if self.ui_manager.is_dirty() {
             let size = render_device.size();
-            self.ui_manager.recompute_layout(world, size.x as f32, size.y as f32);
-            
-            if let Some(screen) = self.ui_manager.get_current_screen_mut() {
-                screen.apply_layout_to_entities(world);
-            }
-            
             world.get::<&MainFont>(|font| {
+                let atlas = self.registry.get_atlas(font.0, 24).unwrap();
+                self.ui_manager.recompute_layout(world, size.x as f32, size.y as f32, atlas);
+                
+                if let Some(screen) = self.ui_manager.get_current_screen_mut() {
+                    screen.apply_layout_to_entities(world);
+                }
                 render_ui_text(world, &mut self.registry, font.0, 24, render_device);
             });
             
@@ -274,11 +276,11 @@ impl KvantumaGame {
                 mouse.last_pos = Some(current_pos);
             } else {
                 // Move cursor
-                self.current_event = self.ui_manager.hit_test(
+                self.current_event.extend(self.ui_manager.hit_test(
                     current_pos,
                     UiEvent::Enter,
                     UiEvent::Exit,
-                );
+                ));
             }
         });
     }

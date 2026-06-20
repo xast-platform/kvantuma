@@ -1,10 +1,10 @@
-use std::{collections::HashMap, hash::Hash};
+use std::{collections::{BTreeMap, HashMap}, hash::Hash};
 
 use glam::{Vec2, Vec3};
 use taffy::{AlignItems, AvailableSpace, Dimension, FlexDirection, JustifyContent, LengthPercentage, NodeId, Size, Style as TaffyStyle, TaffyTree};
 use flecs_ecs::prelude::*;
 use components::*;
-use xastge::{Transform, render::{RenderDevice, material::ColorUiMaterial, mesh::{Mesh, UiVertex}, registry::RenderRegistry, updated}, utils::Rect};
+use xastge::{Transform, render::{RenderDevice, material::ColorUiMaterial, mesh::{Mesh, UiVertex}, registry::RenderRegistry, updated}, ui::atlas::Atlas, utils::Rect};
 
 pub mod key;
 pub mod msg;
@@ -169,12 +169,12 @@ impl<K: Hash + Eq + Copy> UiManager<K> {
         self.current_screen.and_then(|key| self.screens.get_mut(&key))
     }
 
-    pub fn recompute_layout(&mut self, world: &World, screen_width: f32, screen_height: f32) {
+    pub fn recompute_layout(&mut self, world: &World, screen_width: f32, screen_height: f32, font_atlas: &Atlas) {
         self.screen_width = screen_width;
         self.screen_height = screen_height;
         
         for screen in self.screens.values_mut() {
-            screen.recompute_layout(world, screen_width, screen_height);
+            screen.recompute_layout(world, screen_width, screen_height, font_atlas);
         }
         
         self.dirty = true;
@@ -185,7 +185,7 @@ pub struct UiScreen {
     tree: TaffyTree<()>,
     node: Option<NodeId>,
     root: Entity,
-    entity_to_node: HashMap<Entity, NodeId>,
+    entity_to_node: BTreeMap<Entity, NodeId>,
     entity_rects: Vec<UiRect>,
     screen_height: f32,
 }
@@ -196,7 +196,7 @@ impl UiScreen {
             tree: TaffyTree::new(),
             node: None,
             root,
-            entity_to_node: HashMap::new(),
+            entity_to_node: BTreeMap::new(),
             entity_rects: Vec::new(),
             screen_height: 0.0,
         }
@@ -207,11 +207,12 @@ impl UiScreen {
         world: &World,
         screen_width: f32, 
         screen_height: f32,
+        font_atlas: &Atlas,
     ) {
         self.screen_height = screen_height;
         self.tree = TaffyTree::new();
         self.entity_to_node.clear();
-        self.node = Some(compute_layout(world, &mut self.tree, self.root, &mut self.entity_to_node));
+        self.node = Some(compute_layout(world, &mut self.tree, self.root, &mut self.entity_to_node, font_atlas));
         
         if let Some(root_node_id) = self.node {
             self.tree.compute_layout(
@@ -272,21 +273,21 @@ impl UiScreen {
     }
 }
 
-const UNIFORM_WIDTH: f32 = 120.0;
-const UNIFORM_HEIGHT: f32 = 32.0;
 const PADDING: f32 = 8.0;
 
 fn compute_layout(
     world: &World,
     tree: &mut TaffyTree<()>, 
     root_node: Entity,
-    entity_to_node: &mut HashMap<Entity, NodeId>,
+    entity_to_node: &mut BTreeMap<Entity, NodeId>,
+    font_atlas: &Atlas,
 ) -> NodeId {
     let entity = world.entity_from_id(root_node);
     
     let mut is_row = false;
     let mut is_col = false;
     let mut is_text = false;
+    let mut font_metrics = Vec2::default();
     let mut children_vec = Vec::new();
     let mut col_number = 0u8;
     
@@ -302,14 +303,15 @@ fn compute_layout(
             col_number = col.col_number;
         }
         
-        if text_opt.is_some() {
+        if let Some(text) = text_opt {
             is_text = true;
+            font_metrics = font_atlas.measure_text(&text.value, 1.0);
         }
     });
     
     let node_id = if is_row {
         let child_nodes: Vec<_> = children_vec.iter()
-            .map(|child| compute_layout(world, tree, *child, entity_to_node))
+            .map(|child| compute_layout(world, tree, *child, entity_to_node, font_atlas))
             .collect();
         
         let taffy_style = TaffyStyle {
@@ -328,7 +330,7 @@ fn compute_layout(
         tree.new_with_children(taffy_style, &child_nodes).unwrap()
     } else if is_col {
         let child_nodes: Vec<_> = children_vec.iter()
-            .map(|child| compute_layout(world, tree, *child, entity_to_node))
+            .map(|child| compute_layout(world, tree, *child, entity_to_node, font_atlas))
             .collect();
         
         let width_percent = (col_number as f32) / 12.0;
@@ -354,8 +356,8 @@ fn compute_layout(
         tree.new_leaf(
             TaffyStyle {
                 size: Size {
-                    width: Dimension::length(UNIFORM_WIDTH),
-                    height: Dimension::length(UNIFORM_HEIGHT),
+                    width: Dimension::length(font_metrics.x),
+                    height: Dimension::length(font_metrics.y),
                 },
                 ..Default::default()
             },

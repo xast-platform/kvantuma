@@ -265,6 +265,41 @@ impl Atlas {
         (vertices, indices)
     }
 
+    pub fn measure_text(
+        &self,
+        text: &str,
+        horizontal_spacing: f32,
+    ) -> Vec2 {
+        let mut width = 0.0f32;
+        let mut max_ascent = 0.0f32;
+        let mut max_descent = 0.0f32;
+
+        for c in text.chars() {
+            let Some(glyph) = self.glyphs.get(&c) else {
+                continue;
+            };
+
+            if glyph.size == Vec2::ZERO {
+                width += glyph.advance;
+                continue;
+            }
+
+            width += glyph.advance + horizontal_spacing;
+
+            let ascent = -glyph.bearing.y;
+            let descent = glyph.size.y + glyph.bearing.y;
+
+            max_ascent = max_ascent.max(ascent);
+            max_descent = max_descent.max(descent);
+        }
+
+        if width > 0.0 {
+            width -= horizontal_spacing;
+        }
+
+        Vec2::new(width, max_ascent + max_descent)
+    }
+
     pub fn generate_mesh(
         &self, 
         text: &str, 
