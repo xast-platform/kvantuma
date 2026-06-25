@@ -1,5 +1,6 @@
 use anyhow::{Context, Result, bail};
-use glam::Vec2;
+use flecs_ecs::macros::Component;
+use glam::{Vec2, Vec3};
 use image::GenericImageView;
 use std::fs;
 
@@ -108,4 +109,49 @@ impl Rect {
 			&& position.y >= self.y
 			&& position.y <= self.y + self.h
 	}
+}
+
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Component)]
+pub struct Color(pub Vec3);
+
+impl Color {
+    pub const BLACK: Color = Color(Vec3::new(0.0, 0.0, 0.0));
+    pub const WHITE: Color = Color(Vec3::new(1.0, 1.0, 1.0));
+    pub const GRAY: Color  = Color(Vec3::new(0.5, 0.5, 0.5));
+
+    pub const RED: Color    = Color(Vec3::new(1.0, 0.0, 0.0));
+    pub const GREEN: Color  = Color(Vec3::new(0.0, 1.0, 0.0));
+    pub const BLUE: Color   = Color(Vec3::new(0.0, 0.0, 1.0));
+
+    pub const YELLOW: Color = Color(Vec3::new(1.0, 1.0, 0.0));
+    pub const CYAN: Color   = Color(Vec3::new(0.0, 1.0, 1.0));
+    pub const MAGENTA: Color= Color(Vec3::new(1.0, 0.0, 1.0));
+
+    pub const TRANSPARENT: Color = Color(Vec3::new(0.0, 0.0, 0.0));
+
+    #[inline]
+    pub fn new(r: f32, g: f32, b: f32) -> Self {
+        Color(Vec3::new(r, g, b))
+    }
+
+    #[inline]
+    pub fn grayscale(v: f32) -> Self {
+        Color(Vec3::new(v, v, v))
+    }
+
+    #[inline]
+    pub fn lerp(self, other: Color, t: f32) -> Color {
+        Color(self.0 + (other.0 - self.0) * t)
+    }
+}
+
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Component)]
+pub struct Translation(pub Vec3);
+
+impl Translation {
+    pub fn lerp(self, other: Translation, t: f32) -> Vec3 {
+        self.0 + (other.0 - self.0) * t
+    }
 }

@@ -20,9 +20,8 @@ pub struct CameraBuffer {
 
 impl CameraBuffer {
     pub fn new(
-        render_device: &RenderDevice, 
+        render_device: &mut RenderDevice, 
         registry: &mut RenderRegistry,
-        layout: &ShaderResourceLayout,
     ) -> CameraBuffer {
         let handle = registry.new_buffer::<CameraUniform>(
             render_device, 
@@ -33,7 +32,7 @@ impl CameraBuffer {
             .unwrap();
         let resource = ShaderResource::builder()
             .with_buffer(&buffer)
-            .build(render_device, layout);
+            .build(render_device, &CameraBuffer::layout(render_device));
 
         CameraBuffer {
             handle,

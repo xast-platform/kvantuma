@@ -73,7 +73,7 @@ impl<K: Hash + Eq + Copy> UiManager<K> {
         &self, 
         world: &mut World, 
         registry: &mut RenderRegistry,
-        render_device: &mut RenderDevice, 
+        render_device: &mut RenderDevice,
         color: Vec3,
         thickness: f32,
     ) {

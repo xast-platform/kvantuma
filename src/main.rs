@@ -1,13 +1,13 @@
+use std::time::Instant;
+
 use log::LevelFilter;
 use xastge::{
-    Transform, 
-    app::{
+    Transform, app::{
         App, Game,
         window::{
             Action, CursorMode, Key, MouseButton, WindowController, WindowDescriptor, WindowEvent, WindowMode,
         },
-    }, 
-    render::{
+    }, render::{
         RenderDevice, RenderSurface, 
         camera::{Camera, CameraBuffer, OrthographicCamera, PerspectiveCamera}, 
         error::RenderError, 
@@ -18,13 +18,14 @@ use xastge::{
         texture::TextureDescriptor, 
         types::*,
         updated,
-    }, 
-    ui::{
+    }, ui::{
         atlas::{FontHandle, GlyphVertex},
         glyph::FontRef,
         material::TextMaterial,
-    },
+    }, utils::{Color, Translation},
 };
+
+use flecs::system::System as SystemLabel;
 
 pub type KvUiManager = UiManager<ScreenKey>;
 
@@ -43,7 +44,7 @@ use crate::{
         camera::update_camera_buffer,
         ui::render_ui_text,
     },
-    ui::{Ui, UiManager, UiScreen, key::ScreenKey},
+    ui::{Ui, UiManager, UiScreen, components::{KirText, UiPosition}, key::ScreenKey},
 };
 
 #[derive(Component)]
@@ -103,6 +104,40 @@ pub enum UiEvent {
     Exit(Entity),
 }
 
+#[derive(Component)]
+pub struct Hovered;
+
+#[derive(Component)]
+pub struct Unhovered;
+
+#[derive(Component)]
+pub struct Time {
+    delta: f32,
+    last_frame: Instant,
+}
+
+impl Default for Time {
+    fn default() -> Self {
+        Time { delta: 0.0, last_frame: Instant::now() }
+    }
+}
+
+impl Time {
+    pub fn new() -> Self {
+        Time::default()
+    }
+
+    pub fn delta_time(&self) -> f32 {
+        self.delta
+    }
+
+    pub fn update(&mut self, new: Instant) {
+        let dt = (new - self.last_frame).as_secs_f32();
+        self.last_frame = new;
+        self.delta = dt;
+    }
+}
+
 impl Game for KvantumaGame {
     fn init(&mut self, world: &mut World, render_device: &mut RenderDevice) -> anyhow::Result<()> {
         self.register_materials(render_device);
@@ -116,25 +151,70 @@ impl Game for KvantumaGame {
             );
         }
 
+        let ui_root = MyUi.build_ui(world);
+        self.ui_manager.add_screen(ScreenKey::MainMenu, UiScreen::new(ui_root));
+        self.ui_manager.set_screen(ScreenKey::MainMenu);
+
         init_singletons(world, font);
         self.init_skybox(world, render_device)?;
         self.ort_cam_id = self.init_ort_camera(world, render_device)?;
         self.persp_cam_id = self.init_persp_camera(world, render_device)?;
-
-        let test_ui = MyUi;
-        let ui_root = test_ui.build_ui(world);
-        self.ui_manager.add_screen(ScreenKey::MainMenu, UiScreen::new(ui_root));
-        self.ui_manager.set_screen(ScreenKey::MainMenu);
         
         let size = render_device.size();
 
         let atlas = self.registry.get_atlas(font, 24).unwrap();
         self.ui_manager.recompute_layout(world, size.x as f32, size.y as f32, atlas);
 
+        log::info!("recompute_layout size = {size:?}");
+
         Ok(())
     }
 
     fn update(&mut self, world: &mut World) -> anyhow::Result<()> {
+        world.get::<&mut Time>(|time| {
+            time.update(Instant::now());
+        });
+
+        for event in &self.current_event {
+            match event {
+                UiEvent::Enter(enter) => {
+                    world.entity_from_id(*enter)
+                        .add(Hovered)
+                        .remove(Unhovered);
+                },
+                UiEvent::Exit(exit) => {
+                    world.entity_from_id(*exit)
+                        .add(Unhovered)
+                        .remove(Hovered);
+                },
+            }
+        }
+        self.current_event.clear();
+
+        world.get::<&Time>(|time| {
+            let dt = time.delta_time();
+
+            world.query::<(&mut Tween<Color>, &mut TextMaterial)>()
+                .with(Hovered)
+                .build()
+                .each(|(tween, mat)| {
+                    tween.elapsed = (tween.elapsed + dt).min(tween.duration);
+                    let t = (tween.elapsed / tween.duration).clamp(0.0, 1.0);
+                    mat.set_color(tween.from.lerp(tween.to, t));
+                    println!("Processing hovered: {t}");
+                });
+
+            world.query::<(&mut Tween<Color>, &mut TextMaterial)>()
+                .with(Unhovered)
+                .build()
+                .each(|(tween, mat)| {
+                    tween.elapsed = (tween.elapsed - dt).max(0.0);
+                    let t = (tween.elapsed / tween.duration).clamp(0.0, 1.0);
+                    mat.set_color(tween.from.lerp(tween.to, t));
+                    println!("Processing unhovered: {t}");
+                });
+        });
+
         self.movement_system(world);
 
         Ok(())
@@ -159,15 +239,7 @@ impl Game for KvantumaGame {
         Ok(())
     }
 
-    fn render(&mut self, world: &mut World, render_device: &mut RenderDevice) -> Result<(), RenderError> {
-        self.ui_manager.debug_rects(
-            world, 
-            &mut self.registry, 
-            render_device, 
-            Vec3::Y,
-            2.0,
-        );
-        
+    fn render(&mut self, world: &mut World, render_device: &mut RenderDevice) -> Result<(), RenderError> {        
         if self.ui_manager.is_dirty() {
             let size = render_device.size();
             world.get::<&MainFont>(|font| {
@@ -189,30 +261,6 @@ impl Game for KvantumaGame {
         let canvases: &[&dyn RenderSurface] = &[&canvas];
         let mut ctx = render_device.draw_ctx();
 
-        for event in &self.current_event {
-            match event {
-                UiEvent::Enter(enter) => {
-                    world.entity_from_id(*enter)
-                        .get::<Option<&mut TextMaterial>>(|mat| {
-                            if let Some(mat) = mat {
-                                println!("Enter text");
-                                mat.update_color(Vec3::X, render_device, &mut self.registry);
-                            }
-                        })
-                },
-                UiEvent::Exit(exit) => {
-                    world.entity_from_id(*exit)
-                        .get::<Option<&mut TextMaterial>>(|mat| {
-                            if let Some(mat) = mat {
-                                println!("Exit text");
-                                mat.update_color(Vec3::ONE, render_device, &mut self.registry);
-                            }
-                        })
-                },
-            }
-        }
-        self.current_event.clear();
-
         self.render_skybox(world, render_device, canvases, &mut ctx);
         self.render_color(world, render_device, canvases, &mut ctx);
         self.render_ui_text(world, render_device, canvases, &mut ctx);
@@ -220,6 +268,22 @@ impl Game for KvantumaGame {
         ctx.apply(canvas, render_device);
 
         Ok(())
+    }
+}
+
+#[derive(Component, Default, Debug, Clone, Copy)]
+pub struct Tween<T: 'static + Send + Sync> {
+    pub from: T,
+    pub to: T,
+    pub duration: f32,
+    pub elapsed: f32,
+}
+
+impl<T: 'static + Send + Sync> Tween<T> {
+    pub fn new(from: T, to: T, duration: f32) -> Tween<T> {
+        Tween {
+            from, to, duration, elapsed: 0.0
+        }
     }
 }
 
@@ -303,7 +367,7 @@ impl KvantumaGame {
                         canvases,
                         render_device.depth_texture(),
                         Operations {
-                            load: LoadOp::Clear(Color::BLACK),
+                            load: LoadOp::Clear(GpuColor::BLACK),
                             store: StoreOp::Store,
                         },
                     );
@@ -363,6 +427,8 @@ impl KvantumaGame {
 
     fn render_ui_text(&mut self, world: &mut World, render_device: &mut RenderDevice, canvases: &[&(dyn RenderSurface + 'static)], ctx: &mut xastge::render::draw_context::DrawContext) {
         world.each::<(&Mesh<GlyphVertex>, &TextMaterial, &Transform)>(|(mesh, mat, t)| {
+            mat.update(&self.registry, render_device);
+
             world
                 .entity_from_id(self.ort_cam_id)
                 .get::<(&CameraBuffer, &OrthographicCamera)>(|(ui_cam_buffer, _)| {
@@ -446,7 +512,7 @@ impl KvantumaGame {
                     translation: Vec3::new(0.0, 0.0, 1.0),
                     ..Default::default()
                 })
-                .set(CameraBuffer::new(render_device, &mut self.registry, &CameraBuffer::layout(render_device)))
+                .set(CameraBuffer::new(render_device, &mut self.registry))
                 .id()
         )
     }
@@ -466,7 +532,7 @@ impl KvantumaGame {
                     translation: Vec3::new(5.0, 5.0, 5.0),
                     ..Default::default()
                 })
-                .set(CameraBuffer::new(render_device, &mut self.registry, &CameraBuffer::layout(render_device)))
+                .set(CameraBuffer::new(render_device, &mut self.registry))
                 .set(FpsCamera {
                     yaw: 0.0,
                     pitch: 0.0,
@@ -553,6 +619,28 @@ fn main() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+// fn main() {
+//     #[derive(Component)]
+//     struct UpdateLabel;
+
+//     #[derive(Component)]
+//     struct RenderLabel;
+
+//     let world = World::new();
+
+//     world.component::<RenderLabel>()
+//         .depends_on(UpdateLabel);
+
+//     let pipeline = world
+//         .pipeline()
+//         .with(SystemLabel)
+//         .with(UpdateLabel)
+//         .with(RenderLabel)
+//         .build();
+
+//     world.set_pipeline(pipeline);
+// }
 
 pub struct MyUi;
 

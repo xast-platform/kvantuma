@@ -1,12 +1,10 @@
 use flecs_ecs::prelude::*;
 use xastge::{
-    Transform,
-    render::{RenderDevice, registry::RenderRegistry, updated, mesh::Mesh},
-    ui::{atlas::{FontHandle, GlyphVertex}, material::TextMaterial},
+    Transform, render::{RenderDevice, mesh::Mesh, registry::RenderRegistry, updated}, ui::{atlas::{FontHandle, GlyphVertex}, material::TextMaterial}, utils::Color,
 };
 use glam::{Vec2, Vec3, Quat};
 
-use crate::ui::components::{KirText, UiPosition};
+use crate::{Tween, ui::components::{KirText, UiPosition}};
 
 pub fn render_ui_text(
     world: &World,
@@ -24,7 +22,8 @@ pub fn render_ui_text(
                     let mesh = atlas.generate_mesh(&text.value, Vec2::ZERO, 1.0);
 
                     entity
-                        .set(TextMaterial::new(Vec3::ONE, atlas.texture(), render_device, registry))
+                        .set(Tween::<Color>::new(Color::WHITE, Color::RED, 0.1))
+                        .set(TextMaterial::new(Color::WHITE, atlas.texture(), render_device, registry))
                         .set(updated(mesh, render_device, registry));
                 }
             });

@@ -1,8 +1,8 @@
 use flecs_ecs::{core::{Entity, World}, macros::Component};
 use serde::{Deserialize, Serialize};
-use xastge::{Transform, render::texture::TextureHandle};
+use xastge::render::texture::TextureHandle;
 
-#[derive(Component)]
+#[derive(Component, Default)]
 pub struct UiPosition {
     pub x: f32,
     pub y: f32,
@@ -82,7 +82,7 @@ pub fn text(world: &World, value: &str) -> Entity {
         .set(KirText {
             value: value.to_owned(),
         })
-        .set(Transform::default())
+        .set(UiPosition::default())
 }
 
 pub fn row(world: &World, entities: &[Entity]) -> Entity {
@@ -97,7 +97,7 @@ pub fn image(world: &World, image: TextureHandle) -> Entity {
         .set(KirImage {
             image,
         })
-        .set(Transform::default())
+        .set(UiPosition::default())
 }
 
 #[macro_export]

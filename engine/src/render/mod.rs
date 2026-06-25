@@ -38,7 +38,7 @@ pub mod types {
         Operations,
         LoadOp,
         StoreOp,
-        Color,
+        Color as GpuColor,
         BlendState,
         CompareFunction,
         FrontFace,

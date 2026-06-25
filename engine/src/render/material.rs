@@ -7,6 +7,7 @@ use crate::render::RenderDevice;
 use crate::render::buffer::{BufferHandle, BufferResourceDescriptor};
 use crate::render::mesh::{UiVertex, Vertex};
 use crate::render::texture::{Texture, TextureDescriptor, TextureResourceDescriptor, TextureResourceUsage};
+use crate::utils::Color;
 
 use super::{shader_resource::{ShaderResource, ShaderResourceLayout}, registry::RenderRegistry, texture::TextureHandle};
 use super::types::*;
@@ -198,37 +199,62 @@ impl Material for SkyboxMaterial {
 
 #[derive(Debug, Component)]
 pub struct ColorMaterial {
-    pub color: Vec3,
-    pub color_buffer: BufferHandle,
+    color: Color,
+    color_buffer: BufferHandle,
+    dirty: bool,
 }
 
 impl ColorMaterial {
     pub fn new(
-        color: Vec3,
+        color: Color,
         render_device: &RenderDevice,
         registry: &mut RenderRegistry,
     ) -> ColorMaterial {
         let color_buffer = registry
             .new_buffer::<Vec3>(render_device, 1, BufferUsages::UNIFORM)
-            .and_then_mut(registry, |b| b.fill(render_device, 0, &[color]));
+            .and_then_mut(registry, |b| b.fill(render_device, 0, &[color.0]));
 
         ColorMaterial {
             color,
             color_buffer,
+            dirty: false,
         }
     }
 
     pub fn update_color(
         &mut self,
-        new_color: Vec3,
+        new_color: Color,
         render_device: &RenderDevice,
-        registry: &mut RenderRegistry,
+        registry: &RenderRegistry,
     ) {
         self.color = new_color;
         registry
             .get_buffer(self.color_buffer)
             .expect("Cannot update color buffer")
-            .fill_exact(render_device, 0, &[new_color])
+            .fill_exact(render_device, 0, &[new_color.0])
+            .expect("Failed to update color buffer");
+    }
+
+    // Sets color without updating the inner buffer. Must call `update`
+    // afterwards or just use single `update_color` method
+    pub fn set_color(&mut self, color: Color) {
+        self.color = color;
+        self.dirty = true;
+    }
+
+    pub fn update(
+        &self, 
+        registry: &RenderRegistry, 
+        render_device: &RenderDevice,
+    ) {
+        if !self.dirty {
+            return;
+        }
+
+        registry
+            .get_buffer(self.color_buffer)
+            .expect("Cannot update color buffer")
+            .fill_exact(render_device, 0, &[self.color.0])
             .expect("Failed to update color buffer");
     }
 }
