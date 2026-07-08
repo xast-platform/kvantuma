@@ -1,54 +1,10 @@
-use flecs_ecs::sys::{ecs_entity_t, ecs_world_t};
 use flecs_ecs::prelude::*;
 use flecs::system::System as SystemLabel;
-use libloading::{Library, Symbol};
-
-fn load_plugin(path: &str, api: &PluginApi) {
-    let lib = unsafe {
-        Library::new(path).unwrap()
-    };
-
-    unsafe {
-        let func: Symbol<unsafe extern "C" fn(*const PluginApi)> =
-            lib.get(b"register_systems").unwrap();
-
-        func(api);
-    }
-
-    // keep library alive
-    std::mem::forget(lib);
-}
-
-#[repr(C)]
-pub struct PluginApi {
-    // World
-    pub world: *mut ecs_world_t,
-    // Labels
-    pub update: ecs_entity_t,
-    pub render: ecs_entity_t,
-    // Components
-    pub random_number: ecs_entity_t,
-}
+use xastge::plugin::LoadPluginExt;
+use xastge::{RandomNumber, RenderLabel, UpdateLabel};
 
 fn main() {
-    #[derive(Component)]
-    struct UpdateLabel;
-
-    #[derive(Component)]
-    struct RenderLabel;
-
-    #[derive(Component)]
-    #[repr(C)]
-    struct RandomNumber {
-        pub value: u16
-    }
-
     let world = World::new();
-
-    // Register components
-    let update_label_id = world.component::<UpdateLabel>().id();
-    let render_label_id = world.component::<RenderLabel>().id();
-    let random_number_id = world.component::<RandomNumber>().id();
 
     // Simple entity
     world.entity().set(RandomNumber { value: rand::random() });
@@ -96,17 +52,9 @@ fn main() {
             println!("Running render 2");
         });
 
-    println!("world ptr = {:p}", world.ptr_mut());
-    // Register C systems
-    load_plugin(
-        "./cdylib/libplugin.so", 
-        &PluginApi { 
-            world: world.ptr_mut(), 
-            update: *update_label_id, 
-            render: *render_label_id, 
-            random_number: *random_number_id,
-        },
-    );
+    world.load_plugin("testplugin").unwrap_or_else(|e| {
+        panic!("{e}");
+    });
 
     // Run world
     for _ in 0..5 {

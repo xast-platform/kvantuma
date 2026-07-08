@@ -1,4 +1,5 @@
 /target
 /engine/target
 /scene/target
-/cdylib/libplugin.so
+/assets/plugins/*.so
+/assets/plugins/*.dll
