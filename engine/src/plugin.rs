@@ -11,7 +11,7 @@ use libloading::Library;
 use parking_lot::Mutex;
 use thiserror::Error;
 
-use crate::{RandomNumber, RenderLabel, UpdateLabel};
+use crate::{RandomNumber, Render, Update};
 
 static PLUGIN_REGISTRY: OnceLock<Mutex<PluginRegistry>> = OnceLock::new();
 
@@ -61,8 +61,8 @@ impl LoadPluginExt for World {
 
             let api = PluginApi {
                 world: self.ptr_mut(),
-                update_label: *self.component::<UpdateLabel>().id(),
-                render_label: *self.component::<RenderLabel>().id(),
+                update_label: *self.component::<Update>().id(),
+                render_label: *self.component::<Render>().id(),
                 random_number: *self.component::<RandomNumber>().id(),
             };
 

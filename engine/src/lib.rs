@@ -10,10 +10,13 @@ pub mod math;
 use flecs_ecs::macros::Component;
 
 #[derive(Component)]
-pub struct UpdateLabel;
+pub struct Setup;
 
 #[derive(Component)]
-pub struct RenderLabel;
+pub struct Update;
+
+#[derive(Component)]
+pub struct Render;
 
 #[derive(Component)]
 #[repr(C)]
