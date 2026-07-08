@@ -1,3 +1,4 @@
+#include <stdint.h>
 #ifdef _WIN32
 #define EXPORT __declspec(dllexport)
 #else
@@ -8,7 +9,7 @@
 #include <stdio.h>
 
 typedef struct RandomNumber {
-    short value;
+    uint16_t value;
 } RandomNumber;
 
 typedef struct PluginApi {
@@ -40,35 +41,35 @@ static void render_system(ecs_iter_t* it) {
 EXPORT void register_systems(const PluginApi* api) {
     ecs_system_init(api->world, &(ecs_system_desc_t){
         .entity = ecs_entity(api->world, {
-            .name = "CUpdate"
+            .name = "CUpdate",
+            .add = ecs_ids(ecs_dependson(EcsOnUpdate), api->Update)
         }),
         .callback = update_system,
         .query = {
             .terms = {
                 { .id = api->RandomNumber }
             }
-        },
-        .phase = api->Update
+        }
     });
 
     ecs_system_init(api->world, &(ecs_system_desc_t){
         .entity = ecs_entity(api->world, {
-            .name = "CRender"
+            .name = "CRender",
+            .add = ecs_ids(ecs_dependson(EcsOnUpdate), api->Render)
         }),
-        .callback = render_system,
-        .phase = api->Render
+        .callback = render_system
     });
 
     ecs_system_init(api->world, &(ecs_system_desc_t){
         .entity = ecs_entity(api->world, {
-            .name = "PrintRandom"
+            .name = "PrintRandom",
+            .add = ecs_ids(ecs_dependson(EcsOnUpdate), api->Render)
         }),
         .callback = print_random,
         .query = {
             .terms = {
                 { .id = api->RandomNumber }
             }
-        },
-        .phase = api->Render
+        }
     });
 }
