@@ -20,7 +20,7 @@ use xastge::{
         texture::TextureDescriptor, 
         types::*, 
         updated,
-    }, 
+    },
     time::TimeModule, 
     ui::{
         atlas::{FontHandle, GlyphVertex},
@@ -427,32 +427,34 @@ macro_rules! setup_cam_material_module {
                             }
                         });
 
-                    let query = world.query::<&CameraBuffer>()
+                    let camera_query = world.query::<&CameraBuffer>()
                         .with($cam::id())
                         .build();
 
-                    world.system::<(
-                        &Mesh<$vertex>, &$mat, &Transform,
-                        &mut RenderSlot, &RenderRegistry,
-                    )>()
+                    let drawable_query = world.query::<(&Mesh<$vertex>, &$mat, &Transform)>().build();
+
+                    world.system::<(&mut RenderSlot, &RenderRegistry)>()
                         .kind(Render)
-                        .each(move |(mesh, mat, t, slot, registry)| {
-                            query.each(|cam_buffer| {    
-                                let (device, canvas, ctx) = slot.parts_mut();
-                                let canvases: &[&dyn RenderSurface] = &[canvas];
-                                let mut render_pass = ctx.render_pass(
-                                    canvases, 
-                                    device.depth_texture(),
-                                    Operations {
-                                        load: $mat::load_op(),
-                                        store: $mat::store_op(),
-                                    },
-                                );
-                                render_pass.draw(device, registry, DrawDescriptor::<_, _> {
-                                    drawable: Some(mesh),
-                                    instance_data: Some(t),
-                                    global_shader_resources: &[cam_buffer.resource()],
-                                    material: mat,
+                        .each(move |(slot, registry)| {
+                            let (device, canvas, ctx) = slot.parts_mut();
+                            let canvases: &[&dyn RenderSurface] = &[canvas];
+                            let mut render_pass = ctx.render_pass(
+                                canvases, 
+                                device.depth_texture(),
+                                Operations {
+                                    load: $mat::load_op(),
+                                    store: $mat::store_op(),
+                                },
+                            );
+                            
+                            drawable_query.each(|(mesh, mat, t)| {
+                                camera_query.each(|cam_buffer| {
+                                    render_pass.draw(device, registry, DrawDescriptor::<_, _> {
+                                        drawable: Some(mesh),
+                                        instance_data: Some(t),
+                                        global_shader_resources: &[cam_buffer.resource()],
+                                        material: mat,
+                                    });
                                 });
                             });
                         });
