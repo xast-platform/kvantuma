@@ -1,9 +1,11 @@
+use flecs_ecs::macros::Component;
 use wgpu::Color;
 
 use super::*;
 use super::pass::*;
 
 /// Represents a drawing context used for issuing draw commands.
+#[derive(Debug, Component)]
 pub struct DrawContext {
     pub(super) encoder: wgpu::CommandEncoder,
 }

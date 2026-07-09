@@ -1,3 +1,4 @@
+use flecs_ecs::core::component_registration::ComponentId;
 use flecs_ecs::macros::Component;
 use glam::Vec3;
 use image::ImageError;
@@ -12,7 +13,7 @@ use crate::utils::Color;
 use super::{shader_resource::{ShaderResource, ShaderResourceLayout}, registry::RenderRegistry, texture::TextureHandle};
 use super::types::*;
 
-pub trait Material: Send + Sync + 'static {
+pub trait Material: ComponentId {
     fn shader() -> ShaderModuleDescriptor<'static>;
 
     fn vertex_layout() -> Option<VertexBufferLayout<'static>>;
@@ -46,7 +47,7 @@ pub trait Material: Send + Sync + 'static {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Component)]
 pub struct TintedTextureMaterial {
     pub albedo: TextureHandle,
     pub tint: Vec3,

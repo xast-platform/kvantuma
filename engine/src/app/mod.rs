@@ -8,6 +8,8 @@ use flecs_ecs::core::{Entity, WorldGet, query_builder::QueryBuilderImpl, utility
 use flecs_ecs::macros::Component;
 use flecs_ecs::core::flecs::system::System;
 
+use crate::render::Canvas;
+use crate::render::draw_context::DrawContext;
 use crate::{
     Render, Setup, Update, 
     app::{
@@ -58,18 +60,42 @@ impl EcsPipelines {
 }
 
 /// Holds the `RenderDevice` _ONLY_ while the Render pipeline is running.
-#[derive(Component)]
-pub struct RenderDeviceSlot(pub Option<RenderDevice>);
+#[derive(Component, Default)]
+pub struct RenderSlot {
+    render_device: Option<RenderDevice>,
+    canvas: Option<Canvas>,
+    draw_context: Option<DrawContext>,
+}
 
-impl RenderDeviceSlot {
+impl RenderSlot {
     #[inline]
-    pub fn get(&self) -> &RenderDevice {
-        self.0.as_ref().expect("RenderDevice is only available while the Render pipeline runs")
+    pub fn device(&self) -> &RenderDevice {
+        self.render_device.as_ref().expect("RenderDevice is only available while the Setup or Render pipeline runs")
     }
 
     #[inline]
-    pub fn get_mut(&mut self) -> &mut RenderDevice {
-        self.0.as_mut().expect("RenderDevice is only available while the Render pipeline runs")
+    pub fn device_mut(&mut self) -> &mut RenderDevice {
+        self.render_device.as_mut().expect("RenderDevice is only available while the Setup or Render pipeline runs")
+    }
+
+    #[inline]
+    pub fn canvas(&self) -> &Canvas {
+        self.canvas.as_ref().expect("Canvas is only available while the Render pipeline runs")
+    }
+
+    #[inline]
+    pub fn canvas_mut(&mut self) -> &mut Canvas {
+        self.canvas.as_mut().expect("Canvas is only available while the Render pipeline runs")
+    }
+
+    #[inline]
+    pub fn draw_ctx(&self) -> &DrawContext {
+        self.draw_context.as_ref().expect("DrawContext is only available while the Render pipeline runs")
+    }
+
+    #[inline]
+    pub fn draw_ctx_mut(&mut self) -> &mut DrawContext {
+        self.draw_context.as_mut().expect("DrawContext is only available while the Render pipeline runs")
     }
 }
 
@@ -102,6 +128,9 @@ impl XastGE {
         let world = World::new();
         let pipelines = EcsPipelines::new(&world);
 
+        world.component::<DrawContext>().add_trait::<Singleton>();
+        world.component::<Canvas>().add_trait::<Singleton>();
+
         world.component::<WindowSize>().add_trait::<Singleton>();
         world.set(WindowSize {
             width: desc.width as f32,
@@ -114,8 +143,8 @@ impl XastGE {
         world.component::<Mouse>().add_trait::<Singleton>();
         world.set(Mouse::default());
 
-        world.component::<RenderDeviceSlot>().add_trait::<Singleton>();
-        world.set(RenderDeviceSlot(None));
+        world.component::<RenderSlot>().add_trait::<Singleton>();
+        world.set(RenderSlot::default());
 
         world.component::<RenderErrorSlot>().add_trait::<Singleton>();
         world.set(RenderErrorSlot::default());
@@ -178,13 +207,16 @@ impl XastGE {
 
         let device = game_state.render_device.take()
             .expect("RenderDevice is missing outside the Render pipeline");
-        game_state.world.set(RenderDeviceSlot(Some(device)));
+        game_state.world.set(RenderSlot {
+            render_device: Some(device),
+            ..Default::default()
+        });
 
         game_state.world.run_pipeline_time(game_state.pipelines.setup_pipeline, 0.0);
 
         let device = game_state.world
-            .get::<&mut RenderDeviceSlot>(|slot| slot.0.take())
-            .expect("Render pipeline must not remove the RenderDevice singleton");
+            .get::<&mut RenderSlot>(|slot| slot.render_device.take())
+            .expect("Setup pipeline must not clear the RenderSlot singleton");
         game_state.render_device = Some(device);
 
         game_loop(
@@ -206,13 +238,34 @@ impl XastGE {
 
                     let device = g.game.render_device.take()
                         .expect("RenderDevice is missing outside the Render pipeline");
-                    g.game.world.set(RenderDeviceSlot(Some(device)));
+
+                    let draw_ctx = device.draw_ctx();
+                    let canvas = match device.canvas() {
+                        Ok(val) => Some(val),
+                        Err(e) => {
+                            log::error!("Cannot acquire canvas: {e}");
+                            None
+                        }
+                    };
+
+                    g.game.world.set(RenderSlot {
+                        render_device: Some(device),
+                        draw_context: Some(draw_ctx),
+                        canvas,
+                    });
 
                     g.game.world.run_pipeline_time(g.game.pipelines.render_pipeline, 0.0);
 
-                    let device = g.game.world
-                        .get::<&mut RenderDeviceSlot>(|slot| slot.0.take())
-                        .expect("Render pipeline must not remove the RenderDevice singleton");
+                    let (device, draw_ctx, canvas) = g.game.world
+                        .get::<&mut RenderSlot>(|slot| zip3(
+                            slot.render_device.take(),
+                            slot.draw_context.take(),
+                            slot.canvas.take(),
+                        ))
+                        .expect("Render pipeline must not clear the RenderSlot singleton");
+
+                    draw_ctx.apply(canvas, &device);
+
                     g.game.render_device = Some(device);
 
                     if let Some(err) = g.game.world.get::<&mut RenderErrorSlot>(|slot| slot.0.take()) {
@@ -256,4 +309,8 @@ impl XastGE {
             },
         );
     }
+}
+
+fn zip3<A, B, C>(a: Option<A>, b: Option<B>, c: Option<C>) -> Option<(A, B, C)> {
+    Some((a?, b?, c?))
 }

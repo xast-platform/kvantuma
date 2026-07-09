@@ -2,12 +2,12 @@ use std::{marker::PhantomData, time::Instant};
 
 use log::LevelFilter;
 use xastge::{
-    Setup, app::{
-        RenderDeviceSlot, XastGE, window::{
+    Render, Setup, app::{
+        RenderSlot, XastGE, window::{
             Action, CursorMode, Key, MouseButton, WindowController, WindowDescriptor, WindowEvent, WindowMode,
         },
     }, math::Transform, render::{
-        RenderDevice, RenderSurface, camera::{Camera, CameraBuffer, OrthographicCamera, PerspectiveCamera}, error::RenderError, material::{ColorMaterial, ColorUiMaterial, Material, SkyboxMaterial}, mesh::{Mesh, UiVertex, Vertex}, pass::DrawDescriptor, registry::RenderRegistry, texture::TextureDescriptor, types::*, updated,
+        RenderDevice, RenderSurface, camera::{Camera, CameraBuffer, OrthographicCamera, PerspectiveCamera}, error::RenderError, material::{ColorMaterial, ColorUiMaterial, Material, SkyboxMaterial}, mesh::{Mesh, UiVertex, Vertex, VertexTrait}, pass::DrawDescriptor, registry::RenderRegistry, texture::TextureDescriptor, types::*, updated,
     }, ui::{
         atlas::{FontHandle, GlyphVertex},
         glyph::FontRef,
@@ -611,19 +611,25 @@ impl Module for RenderRegistryModule {
 }
 
 #[derive(Component, Default, Debug)]
-pub struct CameraMaterialModule<M: Material>(PhantomData<M>);
+pub struct CameraMaterialModule<V: VertexTrait, M: Material>(PhantomData<(M, V)>);
 
-impl<M: Material> Module for CameraMaterialModule<M> {
+impl<V: VertexTrait, M: Material> Module for CameraMaterialModule<V, M> {
     fn module(world: &World) {
-        world.system::<(Option<&mut RenderRegistry>, &RenderDeviceSlot)>()
+        world.system::<(Option<&mut RenderRegistry>, &RenderSlot)>()
             .kind(Setup)
-            .each(|(maybe_registry, device)| {
+            .each(|(maybe_registry, render_slot)| {
                 if let Some(registry) = maybe_registry {
-                    let camera_buffer = CameraBuffer::layout(device.get());
-                    registry.register_material::<M>(device.get(), &[&camera_buffer]);
+                    let camera_buffer = CameraBuffer::layout(render_slot.device());
+                    registry.register_material::<M>(render_slot.device(), &[&camera_buffer]);
                 } else {
                     log::error!("No render registry found!");
                 }
+            });
+
+        world.system::<(&Mesh<V>, &M, &Transform)>()
+            .kind(Render)
+            .each(|_| {
+
             });
     }
 }
@@ -642,10 +648,10 @@ fn main() -> anyhow::Result<()> {
         cursor_mode: CursorMode::Disabled,
     })?
         .import_module::<RenderRegistryModule>()
-        .import_module::<CameraMaterialModule<TextMaterial>>()
-        .import_module::<CameraMaterialModule<ColorUiMaterial>>()
-        .import_module::<CameraMaterialModule<ColorMaterial>>()
-        .import_module::<CameraMaterialModule<SkyboxMaterial>>()
+        .import_module::<CameraMaterialModule<GlyphVertex, TextMaterial>>()
+        .import_module::<CameraMaterialModule<UiVertex, ColorUiMaterial>>()
+        .import_module::<CameraMaterialModule<Vertex, ColorMaterial>>()
+        .import_module::<CameraMaterialModule<Vertex, SkyboxMaterial>>()
         // .load_plugin("test-plugin")?
         .run();
 
