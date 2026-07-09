@@ -31,14 +31,17 @@ pub struct WindowSize {
 }
 
 impl WindowSize {
+    #[inline]
     pub fn is_changed(&self) -> bool {
         self.is_changed
     }
     
+    #[inline]
     pub fn width(&self) -> f32 {
         self.width
     }
     
+    #[inline]
     pub fn height(&self) -> f32 {
         self.height
     }

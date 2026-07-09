@@ -1,18 +1,40 @@
-use std::{any::type_name, marker::PhantomData, process::id, time::Instant};
-
+use std::any::type_name;
 use log::LevelFilter;
 use xastge::{
-    Render, Setup, Update, app::{
-        RenderSlot, XastGE, input::Keyboard, window::{
+    Render, Setup, Update,
+    app::{
+        RenderSlot, XastGE, 
+        input::{Keyboard, Mouse}, 
+        window::{
             Action, CursorMode, Key, MouseButton, Window, WindowDescriptor, WindowEvent, WindowMode, WindowSize,
         },
-    }, math::Transform, render::{
-        Canvas, RenderDevice, RenderSurface, camera::{Camera, CameraBuffer, OrthographicCamera, PerspectiveCamera}, draw_context::DrawContext, error::RenderError, material::{ColorMaterial, ColorUiMaterial, Material, SkyboxMaterial}, mesh::{Mesh, UiVertex, Vertex, VertexTrait}, pass::DrawDescriptor, registry::{RenderRegistry, RenderRegistryModule}, texture::TextureDescriptor, types::*, updated,
-    }, time::TimeModule, ui::{
+    }, 
+    math::Transform, 
+    render::{
+        RenderSurface, 
+        camera::{Camera, CameraBuffer, OrthographicCamera, PerspectiveCamera, build_orthographic_uniform, build_perspective_uniform}, 
+        material::{ColorMaterial, ColorUiMaterial, Material, SkyboxMaterial}, 
+        mesh::{Mesh, UiVertex, Vertex}, 
+        pass::DrawDescriptor, 
+        registry::{RenderRegistry, RenderRegistryModule}, 
+        texture::TextureDescriptor, 
+        types::*, 
+        updated,
+    }, 
+    time::TimeModule, 
+    ui::{
         atlas::{FontHandle, GlyphVertex},
         glyph::FontRef,
         material::TextMaterial,
-    }, utils::{Color, Translation},
+    }, 
+    utils::{Color, Translation},
+};
+use glam::{DVec2, EulerRot, Quat, Vec3};
+use flecs_ecs::{core::flecs::Singleton, prelude::*, sys::{ecs_entity_t, ecs_world_t}};
+
+use crate::{
+    systems::ui::render_ui_text,
+    ui::{Ui, UiManager, UiScreen, components::{KirText, UiPosition}, key::ScreenKey},
 };
 
 pub type KvUiManager = UiManager<ScreenKey>;
@@ -23,25 +45,10 @@ pub mod systems;
 pub mod ui;
 pub mod singletons;
 
-use glam::{EulerRot, Quat, Vec2, Vec3};
-use flecs_ecs::{core::flecs::Singleton, prelude::*, sys::{ecs_entity_t, ecs_world_t}};
-
-use crate::{
-    // singletons::init_singletons, 
-    systems::{
-        camera::update_camera_buffer,
-        ui::render_ui_text,
-    },
-    ui::{Ui, UiManager, UiScreen, components::{KirText, UiPosition}, key::ScreenKey},
-};
-
 // #[derive(Component)]
 // pub struct MainFont(pub FontHandle);
 
 // struct KvantumaGame {
-//     registry: RenderRegistry,
-//     ort_cam_id: Entity,
-//     persp_cam_id: Entity,
 //     ui_manager: KvUiManager,
 //     current_event: Vec<UiEvent>,
 // }
@@ -132,26 +139,6 @@ use crate::{
 
 //         Ok(())
 //     }
-
-//     fn input(
-//         &mut self,
-//         event: &WindowEvent,
-//         world: &mut World,
-//         window: &mut WindowController<'_>,
-//     ) -> anyhow::Result<()> {
-//         match event {
-//             WindowEvent::FramebufferSize(width, height) => self.resize(world, width, height),
-//             WindowEvent::CursorPos(x, y) => self.process_cursor_pos(world, x, y),
-//             WindowEvent::Key(Key::Escape, _, Action::Press, _) => self.process_escape(world, window),
-//             WindowEvent::Key(key, _, action, _) => self.process_keys(world, key, action),
-//             WindowEvent::MouseButton(MouseButton::Button1, Action::Press, _) => self.process_mouse(world, window),
-//             WindowEvent::Close => { /* save later */ },
-//             _ => {},
-//         }
-
-//         Ok(())
-//     }
-
 //     fn render(&mut self, world: &mut World, render_device: &mut RenderDevice) -> Result<(), RenderError> {        
 //         if self.ui_manager.is_dirty() {
 //             let size = render_device.size();
@@ -167,19 +154,6 @@ use crate::{
             
 //             self.ui_manager.mark_clean();
 //         }
-
-//         update_camera_buffer(world, render_device, &self.registry);
-        
-//         let canvas = render_device.canvas()?;
-//         let canvases: &[&dyn RenderSurface] = &[&canvas];
-//         let mut ctx = render_device.draw_ctx();
-
-//         self.render_skybox(world, render_device, canvases, &mut ctx);
-//         self.render_color(world, render_device, canvases, &mut ctx);
-//         self.render_ui_text(world, render_device, canvases, &mut ctx);
-
-//         ctx.apply(canvas, render_device);
-
 //         Ok(())
 //     }
 // }
@@ -200,193 +174,8 @@ impl<T: 'static + Send + Sync> Tween<T> {
     }
 }
 
-// impl KvantumaGame {
-//     fn process_escape(&self, world: &mut World, window: &mut WindowController<'_>) {
-//         world.get::<&mut MouseState>(|mouse| {
-//             if mouse.captured {
-//                 window.set_cursor_mode(CursorMode::Normal);
-//                 mouse.captured = false;
-//                 mouse.last_pos = None;
-//             }
-//         });
-//     }
-
-//     fn process_mouse(&self, world: &mut World, window: &mut WindowController<'_>) {
-//         world.get::<&mut MouseState>(|mouse| {
-//             if !mouse.captured {
-//                 window.set_cursor_mode(CursorMode::Disabled);
-//                 mouse.captured = true;
-//                 mouse.last_pos = None;
-//             }
-//         });
-//     }
-
-//     fn process_cursor_pos(&mut self, world: &mut World, x: &f64, y: &f64) {
-//         let current_pos = Vec2::new(*x as f32, *y as f32);
-//         world.get::<&mut MouseState>(|mouse| {
-//             if mouse.captured {
-//                 // Rotate camera
-//                 if let Some(last) = mouse.last_pos {
-//                     let delta = current_pos - last;
-
-//                     world.each::<(&mut FlyCamera,)>(|(fly_cam,)| {
-//                         fly_cam.yaw   -= delta.x * fly_cam.sensitivity;
-//                         fly_cam.pitch -= delta.y * fly_cam.sensitivity;
-//                         fly_cam.pitch = fly_cam.pitch.clamp(-1.54, 1.54);
-//                     });
-//                 }
-
-//                 mouse.last_pos = Some(current_pos);
-//             } else {
-//                 // Move cursor
-//                 self.current_event.extend(self.ui_manager.hit_test(
-//                     current_pos,
-//                     UiEvent::Enter,
-//                     UiEvent::Exit,
-//                 ));
-//             }
-//         });
-//     }
-
-//     fn render_skybox(&mut self, world: &mut World, render_device: &mut RenderDevice, canvases: &[&(dyn RenderSurface + 'static)], ctx: &mut xastge::render::draw_context::DrawContext) {
-//         world.each::<(&Mesh<Vertex>, &SkyboxMaterial, &Transform)>(|(mesh, mat, t)| {
-//             world
-//                 .entity_from_id(self.persp_cam_id)
-//                 .get::<(&CameraBuffer, &PerspectiveCamera)>(|(cam_buffer, _)| {
-//                     let mut render_pass = ctx.render_pass(
-//                         canvases,
-//                         render_device.depth_texture(),
-//                         Operations {
-//                             load: LoadOp::Clear(GpuColor::BLACK),
-//                             store: StoreOp::Store,
-//                         },
-//                     );
-//                     render_pass.draw(render_device, &self.registry, DrawDescriptor::<_, _> {
-//                         drawable: Some(mesh),
-//                         instance_data: Some(t),
-//                         global_shader_resources: &[cam_buffer.resource()],
-//                         material: mat,
-//                     });
-//                 });
-//         });
-//     }
-
-//     fn render_color(&mut self, world: &mut World, render_device: &mut RenderDevice, canvases: &[&(dyn RenderSurface + 'static)], ctx: &mut xastge::render::draw_context::DrawContext) {
-//         world.each::<(&Mesh<Vertex>, &ColorMaterial, &Transform)>(|(mesh, mat, t)| {
-//             world
-//                 .entity_from_id(self.persp_cam_id)
-//                 .get::<(&CameraBuffer, &PerspectiveCamera)>(|(cam_buffer, _)| {
-//                     let mut render_pass = ctx.render_pass(
-//                         canvases, 
-//                         render_device.depth_texture(),
-//                         Operations {
-//                             load: LoadOp::Load,
-//                             store: StoreOp::Store,
-//                         },
-//                     );
-//                     render_pass.draw(render_device, &self.registry, DrawDescriptor::<_, _> {
-//                         drawable: Some(mesh),
-//                         instance_data: Some(t),
-//                         global_shader_resources: &[cam_buffer.resource()],
-//                         material: mat,
-//                     });
-//                 });
-//         });
-
-//         world.each::<(&Mesh<UiVertex>, &ColorUiMaterial, &Transform)>(|(mesh, mat, t)| {
-//             world
-//                 .entity_from_id(self.ort_cam_id)
-//                 .get::<(&CameraBuffer, &OrthographicCamera)>(|(ui_cam_buffer, _)| {
-//                     let mut render_pass = ctx.render_pass(
-//                         canvases, 
-//                         render_device.depth_texture(),
-//                         Operations {
-//                             load: LoadOp::Load,
-//                             store: StoreOp::Store,
-//                         },
-//                     );
-//                     render_pass.draw(render_device, &self.registry, DrawDescriptor::<_, _> {
-//                         drawable: Some(mesh),
-//                         instance_data: Some(t),
-//                         global_shader_resources: &[ui_cam_buffer.resource()],
-//                         material: mat,
-//                     });
-//                 });
-//         });
-//     }
-
-//     fn render_ui_text(&mut self, world: &mut World, render_device: &mut RenderDevice, canvases: &[&(dyn RenderSurface + 'static)], ctx: &mut xastge::render::draw_context::DrawContext) {
-//         world.each::<(&Mesh<GlyphVertex>, &TextMaterial, &Transform)>(|(mesh, mat, t)| {
-//             mat.update(&self.registry, render_device);
-
-//             world
-//                 .entity_from_id(self.ort_cam_id)
-//                 .get::<(&CameraBuffer, &OrthographicCamera)>(|(ui_cam_buffer, _)| {
-//                     let mut render_pass = ctx.render_pass(
-//                         canvases, 
-//                         render_device.depth_texture(),
-//                         Operations {
-//                             load: LoadOp::Load,
-//                             store: StoreOp::Store,
-//                         },
-//                     );
-//                     render_pass.draw(render_device, &self.registry, DrawDescriptor::<_, _> {
-//                         drawable: Some(mesh),
-//                         instance_data: Some(t),
-//                         global_shader_resources: &[ui_cam_buffer.resource()],
-//                         material: mat,
-//                     });
-//                 });
-//         });
-//     }
-
-//     fn resize(&mut self, world: &mut World, width: &i32, height: &i32) {
-//         let w = *width as f32;
-//         let h = *height as f32;
-        
-//         world.each::<(&mut OrthographicCamera, &Camera)>(|(ort_cam, _cam)| {
-//             ort_cam.resize_viewport(w, h);
-//         });
-//         world.each::<(&mut PerspectiveCamera, &Camera)>(|(persp_cam, _cam)| {
-//             persp_cam.set_aspect(w / h);
-//         });
-        
-//         self.ui_manager.mark_dirty();
-//     }
-
-//     fn init_skybox(
-//         &mut self,
-//         world: &World,
-//         render_device: &mut RenderDevice,
-//     ) -> anyhow::Result<()> {
-//         world.entity()
-//             .set(updated(
-//                 Mesh::load_obj("./assets/meshes/cube.obj"),
-//                 render_device,
-//                 &mut self.registry,
-//             ))
-//             .set(SkyboxMaterial::new(self.registry.load_cubemap(
-//                 render_device,
-//                 [
-//                     "./assets/textures/skyboxes/sky1_cubemap_faces/right_cubemap.png",
-//                     "./assets/textures/skyboxes/sky1_cubemap_faces/left_cubemap.png",
-//                     "./assets/textures/skyboxes/sky1_cubemap_faces/top_cubemap.png",
-//                     "./assets/textures/skyboxes/sky1_cubemap_faces/bottom_cubemap.png",
-//                     "./assets/textures/skyboxes/sky1_cubemap_faces/front_cubemap.png",
-//                     "./assets/textures/skyboxes/sky1_cubemap_faces/back_cubemap.png",
-//                 ],
-//                 TextureDescriptor::default(),
-//             )?))
-//             .add(SkyboxTag)
-//             .set(Transform {
-//                 translation: Vec3::ZERO,
-//                 rotation: Quat::IDENTITY,
-//                 scale: Vec3::splat(200.0),
-//             });
-
-//         Ok(())
-//     }
-// }
+// Must be done in render of Text
+// mat.update(&self.registry, render_device);
 
 pub struct MyUi;
 
@@ -442,6 +231,10 @@ impl Module for FlyCameraModule {
         world.component::<MovementInput>().add_trait::<Singleton>();
         world.set(MovementInput::default());
 
+        world.component::<MouseState>().add_trait::<Singleton>();
+        world.set(MouseState::new(true));
+
+        // Setup cameras
         let w = world.clone();
         world.system::<(&mut RenderRegistry, &RenderSlot, &WindowSize)>()
             .kind(Setup)
@@ -473,16 +266,75 @@ impl Module for FlyCameraModule {
                     });
             });
 
-        // Movement input processing
-        world.system::<(&mut MovementInput, &Keyboard)>()
+        // Resize cameras
+        let ort_query = world.query::<&mut OrthographicCamera>()
+            .with(Camera::id())
+            .build();
+
+        let persp_query = world.query::<&mut PerspectiveCamera>()
+            .with(Camera::id())
+            .build();
+
+        world.system::<&WindowSize>()
             .kind(Update)
-            .each(|(input, keyboard)| {
+            .each(move |size| {               
+                ort_query.each(|ort_cam| {
+                    ort_cam.resize_viewport(size.width(), size.height());
+                });
+                persp_query.each(|persp_cam| {
+                    persp_cam.set_aspect(size.width() / size.height());
+                });
+                
+                // TODO: self.ui_manager.mark_dirty();
+            });
+
+        // Movement input processing
+        let query = world.query::<&mut FlyCamera>().build();
+        world.system::<(&mut MovementInput, &Keyboard, &Mouse, &mut MouseState, &mut Window)>()
+            .kind(Update)
+            .each(move |(input, keyboard, mouse, mouse_state, window)| {
+                if keyboard.just_pressed(Key::Escape) {
+                    if mouse_state.captured {
+                        window.set_cursor_mode(CursorMode::Normal);
+                        mouse_state.captured = false;
+                    } else {
+                        window.set_cursor_mode(CursorMode::Disabled);
+                        mouse_state.captured = true;
+                    }
+
+                    mouse_state.last_pos = None;
+                }
+
                 input.forward = keyboard.is_pressed(Key::W);
                 input.backward = keyboard.is_pressed(Key::S);
                 input.left = keyboard.is_pressed(Key::A);
                 input.right = keyboard.is_pressed(Key::D);
+
+                let current_pos = mouse.position();
+                    if mouse_state.captured {
+                        // Rotate camera
+                        if let Some(last) = mouse_state.last_pos {
+                            let delta = current_pos - last;
+
+                            query.each(|fly_cam| {
+                                fly_cam.yaw   -= (delta.x as f32) * fly_cam.sensitivity;
+                                fly_cam.pitch -= (delta.y as f32) * fly_cam.sensitivity;
+                                fly_cam.pitch = fly_cam.pitch.clamp(-1.54, 1.54);
+                            });
+                        }
+
+                        mouse_state.last_pos = Some(current_pos);
+                    } else {
+                        // TODO: Move cursor
+                        // self.current_event.extend(self.ui_manager.hit_test(
+                        //     current_pos,
+                        //     UiEvent::Enter,
+                        //     UiEvent::Exit,
+                        // ));
+                    }
             });
             
+        // Update camera transformation
         let query = world.query::<&mut Transform>()
             .with(SkyboxTag)
             .build();
@@ -491,7 +343,6 @@ impl Module for FlyCameraModule {
             .kind(Update)
             .with(Camera::id())
             .each(move |(t, fly_cam, input)| {
-                dbg!(&t);
                 let rotation = Quat::from_euler(EulerRot::YXZ, fly_cam.yaw, fly_cam.pitch, 0.0);
                 t.rotation = rotation;
 
@@ -523,12 +374,42 @@ impl Module for FlyCameraModule {
                     skybox_t.translation = t.translation;
                 });
             });
+
+        // Update camera buffers
+        let ort_query = world.query::<(&Camera, &OrthographicCamera, &Transform, &CameraBuffer)>().build();
+        let persp_query = world.query::<(&Camera, &PerspectiveCamera, &Transform, &CameraBuffer)>().build();
+
+        world.system::<(&RenderSlot, &RenderRegistry)>()
+            .kind(Render)
+            .each(move |(render_slot, registry)| {
+                ort_query.each(|(cam, ort_cam, t, buf)| {
+                    let uniform = build_orthographic_uniform(cam, ort_cam, t);
+                    if let Some(buf) = registry.get_buffer(buf.handle()) {
+                        buf.fill_exact(render_slot.device(), 0, &[uniform]).unwrap_or_else(|e| {
+                            log::error!("{e}");
+                        });
+                    } else {
+                        log::error!("Camera buffer not found in registry");
+                    }
+                });
+
+                persp_query.each(|(cam, persp_cam, t, buf)| {
+                    let uniform = build_perspective_uniform(cam, persp_cam, t);
+                    if let Some(buf) = registry.get_buffer(buf.handle()) {
+                        buf.fill_exact(render_slot.device(), 0, &[uniform]).unwrap_or_else(|e| {
+                            log::error!("{e}");
+                        });
+                    } else {
+                        log::error!("Camera buffer not found in registry");
+                    }
+                });
+            });
     }
 }
 
 #[macro_export]
-macro_rules! setup_material_module {
-    ($vertex:ident, $mat:ident) => { 
+macro_rules! setup_cam_material_module {
+    ($vertex:ident, $mat:ident, $cam:ident) => { 
         paste::paste! {
             #[derive(Component, Default, Debug)]
             pub struct [<$mat Module>];
@@ -547,7 +428,7 @@ macro_rules! setup_material_module {
                         });
 
                     let query = world.query::<&CameraBuffer>()
-                        .with(PerspectiveCamera::id())
+                        .with($cam::id())
                         .build();
 
                     world.system::<(
@@ -581,10 +462,10 @@ macro_rules! setup_material_module {
     };
 }
 
-setup_material_module!(Vertex, ColorMaterial);
-setup_material_module!(GlyphVertex, TextMaterial);
-setup_material_module!(UiVertex, ColorUiMaterial);
-setup_material_module!(Vertex, SkyboxMaterial);
+setup_cam_material_module!(Vertex, ColorMaterial, PerspectiveCamera);
+setup_cam_material_module!(GlyphVertex, TextMaterial, OrthographicCamera);
+setup_cam_material_module!(UiVertex, ColorUiMaterial, OrthographicCamera);
+setup_cam_material_module!(Vertex, SkyboxMaterial, PerspectiveCamera);
 
 #[derive(Component)]
 pub struct TestCubeModule;
@@ -605,7 +486,7 @@ impl Module for TestCubeModule {
 
 #[derive(Component, Default)]
 pub struct MouseState {
-    pub last_pos: Option<Vec2>,
+    pub last_pos: Option<DVec2>,
     pub captured: bool,
 }
 
@@ -619,29 +500,36 @@ impl MouseState {
 }
 
 #[derive(Component)]
-pub struct MouseCaptureModule;
+pub struct InitSkyboxModule;
 
-impl Module for MouseCaptureModule {
+impl Module for InitSkyboxModule {
     fn module(world: &World) {
-        world.component::<MouseState>().add_trait::<Singleton>();
-        world.set(MouseState::new(true));
-
-        world.system::<(&mut MouseState, &Keyboard, &mut Window)>()
-            .kind(Update)
-            .each(|(mouse, keyboard, window)| {
-                if !keyboard.just_pressed(Key::Escape) {
-                    return;
-                }
-
-                if mouse.captured {
-                    window.set_cursor_mode(CursorMode::Normal);
-                    mouse.captured = false;
-                } else {
-                    window.set_cursor_mode(CursorMode::Disabled);
-                    mouse.captured = true;
-                }
-
-                mouse.last_pos = None;
+        let w = world.clone();
+        world.system::<(&mut RenderSlot, &mut RenderRegistry)>()
+            .kind(Setup)
+            .each(move |(slot, registry)| {
+                w.entity()
+                    .set(updated(Mesh::load_obj("./assets/meshes/cube.obj"), slot.device_mut(), registry))
+                    .set(SkyboxMaterial::new(
+                        registry.load_cubemap(
+                            slot.device(),
+                            [
+                                "./assets/textures/skyboxes/sky1_cubemap_faces/right_cubemap.png",
+                                "./assets/textures/skyboxes/sky1_cubemap_faces/left_cubemap.png",
+                                "./assets/textures/skyboxes/sky1_cubemap_faces/top_cubemap.png",
+                                "./assets/textures/skyboxes/sky1_cubemap_faces/bottom_cubemap.png",
+                                "./assets/textures/skyboxes/sky1_cubemap_faces/front_cubemap.png",
+                                "./assets/textures/skyboxes/sky1_cubemap_faces/back_cubemap.png",
+                            ],
+                            TextureDescriptor::default(),
+                        ).expect("Cannot load cubemap")
+                    ))
+                    .add(SkyboxTag)
+                    .set(Transform {
+                        translation: Vec3::ZERO,
+                        rotation: Quat::IDENTITY,
+                        scale: Vec3::splat(200.0),
+                    });
             });
     }
 }
@@ -663,11 +551,13 @@ fn main() -> anyhow::Result<()> {
         .import_module::<RenderRegistryModule>()
         .import_module::<TestCubeModule>()
         .import_module::<FlyCameraModule>()
-        .import_module::<MouseCaptureModule>()
 
+        .import_module::<SkyboxMaterialModule>()
         .import_module::<ColorUiMaterialModule>()
         .import_module::<ColorMaterialModule>()
         .import_module::<TextMaterialModule>()
+
+        .import_module::<InitSkyboxModule>()
         // .load_plugin("test-plugin")?
         .run();
 

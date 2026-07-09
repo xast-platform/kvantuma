@@ -1,6 +1,3 @@
-use flecs_ecs::core::World;
-use xastge::ui::atlas::FontHandle;
-
 // use crate::{MainFont, MouseState, MovementInput, Time, game::GameState, menu::main_menu::{MainMenuButton, MainMenuData}};
 
 // pub fn init_singletons(world: &mut World, font: FontHandle) {
