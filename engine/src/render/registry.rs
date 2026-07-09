@@ -2,6 +2,7 @@ use std::{any::TypeId, collections::HashMap};
 
 use ab_glyph::FontRef;
 use bytemuck::Pod;
+use flecs_ecs::macros::Component;
 use image::ImageError;
 use slotmap::SlotMap;
 
@@ -19,7 +20,7 @@ use super::{
     texture::{Texture, TextureHandle},
 };
 
-#[derive(Default)]
+#[derive(Component, Default)]
 pub struct RenderRegistry {
     pipelines: HashMap<TypeId, Pipeline>,
     buffers: SlotMap<BufferHandle, BufferStorage>,

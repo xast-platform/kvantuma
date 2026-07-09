@@ -1,4 +1,5 @@
 use flecs_ecs::core::World;
+use flecs_ecs::core::flecs::Singleton;
 use flecs_ecs::prelude::Builder;
 use glam::UVec2;
 use glfw::{Glfw, PWindow, WindowEvent};
@@ -61,10 +62,12 @@ impl EcsPipelines {
 pub struct RenderDeviceSlot(pub Option<RenderDevice>);
 
 impl RenderDeviceSlot {
+    #[inline]
     pub fn get(&self) -> &RenderDevice {
         self.0.as_ref().expect("RenderDevice is only available while the Render pipeline runs")
     }
 
+    #[inline]
     pub fn get_mut(&mut self) -> &mut RenderDevice {
         self.0.as_mut().expect("RenderDevice is only available while the Render pipeline runs")
     }
@@ -99,13 +102,22 @@ impl XastGE {
         let world = World::new();
         let pipelines = EcsPipelines::new(&world);
 
+        world.component::<WindowSize>().add_trait::<Singleton>();
         world.set(WindowSize {
             width: desc.width as f32,
             height: desc.height as f32,
         });
+        
+        world.component::<Keyboard>().add_trait::<Singleton>();
         world.set(Keyboard::default());
+
+        world.component::<Mouse>().add_trait::<Singleton>();
         world.set(Mouse::default());
+
+        world.component::<RenderDeviceSlot>().add_trait::<Singleton>();
         world.set(RenderDeviceSlot(None));
+
+        world.component::<RenderErrorSlot>().add_trait::<Singleton>();
         world.set(RenderErrorSlot::default());
 
         let (mut window, events) = glfw.with_primary_monitor(|glfw, m| {
@@ -158,13 +170,22 @@ impl XastGE {
             pipelines,
         } = self;
 
-        world.run_pipeline_time(pipelines.setup_pipeline, 0.0);
-
-        let game_state = GameState {
+        let mut game_state = GameState {
             world,
             render_device: Some(render_device),
             pipelines,
         };
+
+        let device = game_state.render_device.take()
+            .expect("RenderDevice is missing outside the Render pipeline");
+        game_state.world.set(RenderDeviceSlot(Some(device)));
+
+        game_state.world.run_pipeline_time(game_state.pipelines.setup_pipeline, 0.0);
+
+        let device = game_state.world
+            .get::<&mut RenderDeviceSlot>(|slot| slot.0.take())
+            .expect("Render pipeline must not remove the RenderDevice singleton");
+        game_state.render_device = Some(device);
 
         game_loop(
             glfw,

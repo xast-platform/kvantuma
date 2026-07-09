@@ -4,7 +4,7 @@ use glam::{Vec2, Vec3};
 use taffy::{AlignItems, AvailableSpace, Dimension, FlexDirection, JustifyContent, LengthPercentage, NodeId, Size, Style as TaffyStyle, TaffyTree};
 use flecs_ecs::prelude::*;
 use components::*;
-use xastge::{Transform, render::{RenderDevice, material::ColorUiMaterial, mesh::{Mesh, UiVertex}, registry::RenderRegistry, updated}, ui::atlas::Atlas, utils::Rect};
+use xastge::{math::Transform, render::{RenderDevice, material::ColorUiMaterial, mesh::{Mesh, UiVertex}, registry::RenderRegistry, updated}, ui::atlas::Atlas, utils::Rect};
 
 pub mod key;
 pub mod msg;

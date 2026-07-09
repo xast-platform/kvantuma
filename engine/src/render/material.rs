@@ -12,7 +12,7 @@ use crate::utils::Color;
 use super::{shader_resource::{ShaderResource, ShaderResourceLayout}, registry::RenderRegistry, texture::TextureHandle};
 use super::types::*;
 
-pub trait Material {
+pub trait Material: Send + Sync + 'static {
     fn shader() -> ShaderModuleDescriptor<'static>;
 
     fn vertex_layout() -> Option<VertexBufferLayout<'static>>;
