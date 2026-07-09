@@ -15,7 +15,7 @@ use crate::{
     app::{
         helper::{GameLoopCallbacks, game_loop},
         input::{Keyboard, Mouse},
-        window::{Events, WindowDescriptor, WindowMode, WindowSize}
+        window::{Events, Window, WindowDescriptor, WindowMode, WindowSize}
     }, 
     error::GameError, 
     plugin::{self, LoadPluginExt}, 
@@ -136,7 +136,11 @@ impl XastGE {
             width: desc.width as f32,
             height: desc.height as f32,
         });
-        
+
+        world.component::<Window>().add_trait::<Singleton>();
+        world.set(Window::default());
+
+
         world.component::<Keyboard>().add_trait::<Singleton>();
         world.set(Keyboard::default());
 
@@ -228,7 +232,14 @@ impl XastGE {
             GameLoopCallbacks {
                 update: |g| {
                     let dt = g.fixed_time_step() as f32;
+
+                    let window = g.window.take().expect("window is missing outside the Update pipeline");
+                    g.game.world.get::<&mut Window>(|w| w.install(window));
+
                     g.game.world.run_pipeline_time(g.game.pipelines.update_pipeline, dt);
+
+                    let window = g.game.world.get::<&mut Window>(|w| w.take());
+                    g.window = Some(window);
                 },
                 render: |g| {
                     g.game.world.get::<(&mut Keyboard, &mut Mouse)>(|(kb, mouse)| {

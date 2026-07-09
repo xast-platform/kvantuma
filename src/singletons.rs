@@ -6,8 +6,6 @@ use xastge::ui::atlas::FontHandle;
 // pub fn init_singletons(world: &mut World, font: FontHandle) {
 //     world.set(Time::new());
 //     world.set(MainFont(font));
-//     world.set(MouseState::new(true));
-//     world.set(MovementInput::default());
 //     world.set(GameState::MainMenu(MainMenuData::Home { 
 //         heading: "KVANTUMA".to_owned(), 
 //         buttons: vec![

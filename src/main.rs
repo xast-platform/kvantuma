@@ -2,9 +2,9 @@ use std::{marker::PhantomData, time::Instant};
 
 use log::LevelFilter;
 use xastge::{
-    Render, Setup, app::{
-        RenderSlot, XastGE, window::{
-            Action, CursorMode, Key, MouseButton, WindowController, WindowDescriptor, WindowEvent, WindowMode,
+    Render, Setup, Update, app::{
+        RenderSlot, XastGE, input::Keyboard, window::{
+            Action, CursorMode, Key, MouseButton, Window, WindowDescriptor, WindowEvent, WindowMode, WindowSize,
         },
     }, math::Transform, render::{
         RenderDevice, RenderSurface, camera::{Camera, CameraBuffer, OrthographicCamera, PerspectiveCamera}, error::RenderError, material::{ColorMaterial, ColorUiMaterial, Material, SkyboxMaterial}, mesh::{Mesh, UiVertex, Vertex, VertexTrait}, pass::DrawDescriptor, registry::RenderRegistry, texture::TextureDescriptor, types::*, updated,
@@ -35,42 +35,11 @@ use crate::{
     ui::{Ui, UiManager, UiScreen, components::{KirText, UiPosition}, key::ScreenKey},
 };
 
-// #[derive(Component)]
-// pub struct FpsCamera {
-//     pub yaw: f32,
-//     pub pitch: f32,
-//     pub sensitivity: f32,
-//     pub move_speed: f32,
-// }
-
-// impl FpsCamera {
+// impl FlyCamera {
 //     pub fn forward(&self) -> Vec3 {
 //         (Quat::from_euler(EulerRot::YXZ, self.yaw, self.pitch, 0.0) * Vec3::NEG_Z)
 //             .normalize()
 //     }
-// }
-
-// #[derive(Component, Default)]
-// pub struct MouseState {
-//     pub last_pos: Option<Vec2>,
-//     pub captured: bool,
-// }
-
-// impl MouseState {
-//     pub fn new(captured: bool) -> Self {
-//         Self {
-//             last_pos: None,
-//             captured,
-//         }
-//     }
-// }
-
-// #[derive(Component, Default, Clone, Copy)]
-// pub struct MovementInput {
-//     pub forward: bool,
-//     pub backward: bool,
-//     pub left: bool,
-//     pub right: bool,
 // }
 
 // #[derive(Component)]
@@ -294,20 +263,6 @@ impl<T: 'static + Send + Sync> Tween<T> {
 //         });
 //     }
 
-//     fn process_keys(&self, world: &mut World, key: &Key, action: &Action) {
-//         world.get::<&mut MovementInput>(|input| {
-//             let pressed = matches!(*action, Action::Press | Action::Repeat);
-
-//             match *key {
-//                 Key::W => input.forward = pressed,
-//                 Key::S => input.backward = pressed,
-//                 Key::A => input.left = pressed,
-//                 Key::D => input.right = pressed,
-//                 _ => {}
-//             }
-//         });
-//     }
-
 //     fn process_cursor_pos(&mut self, world: &mut World, x: &f64, y: &f64) {
 //         let current_pos = Vec2::new(*x as f32, *y as f32);
 //         world.get::<&mut MouseState>(|mouse| {
@@ -316,7 +271,7 @@ impl<T: 'static + Send + Sync> Tween<T> {
 //                 if let Some(last) = mouse.last_pos {
 //                     let delta = current_pos - last;
 
-//                     world.each::<(&mut FpsCamera,)>(|(fps,)| {
+//                     world.each::<(&mut FlyCamera,)>(|(fps,)| {
 //                         fps.yaw   -= delta.x * fps.sensitivity;
 //                         fps.pitch -= delta.y * fps.sensitivity;
 //                         fps.pitch = fps.pitch.clamp(-1.54, 1.54);
@@ -473,102 +428,6 @@ impl<T: 'static + Send + Sync> Tween<T> {
 
 //         Ok(())
 //     }
-
-//     fn init_ort_camera(
-//         &mut self,
-//         world: &World,
-//         render_device: &mut RenderDevice,
-//     ) -> anyhow::Result<Entity> {
-//         let size = render_device.size();
-
-//         Ok(
-//             world.entity()
-//                 .set(OrthographicCamera::from_viewport(size.x as f32, size.y as f32))
-//                 .set(Camera::default())
-//                 .set(Transform {
-//                     translation: Vec3::new(0.0, 0.0, 1.0),
-//                     ..Default::default()
-//                 })
-//                 .set(CameraBuffer::new(render_device, &mut self.registry))
-//                 .id()
-//         )
-//     }
-
-//     fn init_persp_camera(
-//         &mut self,
-//         world: &World,
-//         render_device: &mut RenderDevice,
-//     ) -> anyhow::Result<Entity> {
-//         let size = render_device.size();
-
-//         Ok(
-//             world.entity()
-//                 .set(PerspectiveCamera::from_aspect(size.x as f32 / size.y as f32))
-//                 .set(Camera::default())
-//                 .set(Transform {
-//                     translation: Vec3::new(5.0, 5.0, 5.0),
-//                     ..Default::default()
-//                 })
-//                 .set(CameraBuffer::new(render_device, &mut self.registry))
-//                 .set(FpsCamera {
-//                     yaw: 0.0,
-//                     pitch: 0.0,
-//                     sensitivity: 0.002,
-//                     move_speed: 0.08,
-//                 })
-//                 .id()
-//         )
-//     }
-
-//     fn movement_system(
-//         &self,
-//         world: &World,
-//     ) {
-//         let mut movement = MovementInput::default();
-//         world.get::<&MovementInput>(|input| {
-//             movement = *input;
-//         });
-
-//         world.each::<(&mut Transform, &FpsCamera, &Camera)>(|(t, fps, _)| {
-//             let rotation = Quat::from_euler(EulerRot::YXZ, fps.yaw, fps.pitch, 0.0);
-//             t.rotation = rotation;
-
-//             let forward = (rotation * Vec3::NEG_Z).normalize();
-//             let right = (rotation * Vec3::X).normalize();
-
-//             let mut direction = Vec3::ZERO;
-//             if movement.forward {
-//                 direction += forward;
-//             }
-//             if movement.backward {
-//                 direction -= forward;
-//             }
-//             if movement.left {
-//                 direction -= right;
-//             }
-//             if movement.right {
-//                 direction += right;
-//             }
-
-//             if direction.length_squared() > 0.0 {
-//                 t.translation += direction.normalize() * fps.move_speed;
-//             }
-//         });
-
-//         let mut camera_translation = Vec3::ZERO;
-//         world
-//             .entity_from_id(self.persp_cam_id)
-//             .get::<&Transform>(|cam_t| {
-//                 camera_translation = cam_t.translation;
-//             });
-
-//         world.query::<&mut Transform>()
-//             .with(SkyboxTag)
-//             .build()
-//             .each(|t| {
-//                 t.translation = camera_translation;
-//             });
-//     }
 // }
 
 pub struct MyUi;
@@ -592,11 +451,123 @@ impl Ui for MyUi {
 }
 
 #[derive(Component)]
+pub struct FlyCamera {
+    pub yaw: f32,
+    pub pitch: f32,
+    pub sensitivity: f32,
+    pub move_speed: f32,
+}
+
+#[derive(Component, Debug, Default, Clone, Copy)]
+pub struct MovementInput {
+    pub forward: bool,
+    pub backward: bool,
+    pub left: bool,
+    pub right: bool,
+}
+
+#[derive(Component)]
 pub struct FlyCameraModule;
 
 impl Module for FlyCameraModule {
     fn module(world: &World) {
-        
+        world.component::<MovementInput>().add_trait::<Singleton>();
+        world.set(MovementInput::default());
+
+        let w = world.clone();
+        world.system::<(&mut RenderRegistry, &RenderSlot, &WindowSize)>()
+            .kind(Setup)
+            .each(move |(registry, render_slot, size)| {
+                // Orthographic camera
+                w.entity()
+                    .set(OrthographicCamera::from_viewport(size.width, size.height))
+                    .set(Camera::default())
+                    .set(Transform {
+                        translation: Vec3::new(0.0, 0.0, 1.0),
+                        ..Default::default()
+                    })
+                    .set(CameraBuffer::new(render_slot.device(), registry));
+
+                // Perspective camera
+                w.entity()
+                    .set(PerspectiveCamera::from_aspect(size.width / size.height))
+                    .set(Camera::default())
+                    .set(Transform {
+                        translation: Vec3::new(5.0, 5.0, 5.0),
+                        ..Default::default()
+                    })
+                    .set(CameraBuffer::new(render_slot.device(), registry))
+                    .set(FlyCamera {
+                        yaw: 0.0,
+                        pitch: 0.0,
+                        sensitivity: 0.002,
+                        move_speed: 0.08,
+                    });
+            });
+
+        world.system::<(&mut MovementInput, &Keyboard)>()
+            .kind(Update)
+            .each(|(input, keyboard)| {
+                input.forward = keyboard.is_pressed(Key::W);
+                input.backward = keyboard.is_pressed(Key::S);
+                input.left = keyboard.is_pressed(Key::A);
+                input.right = keyboard.is_pressed(Key::D);
+
+                dbg!(input);
+            });
+            
+        // fn movement_system(
+        //     &self,
+        //     world: &World,
+        // ) {
+        //     let mut movement = MovementInput::default();
+        //     world.get::<&MovementInput>(|input| {
+        //         movement = *input;
+        //     });            
+
+        //     world.each::<(&mut Transform, &FlyCamera, &Camera)>(|(t, fps, _)| {
+        //         let rotation = Quat::from_euler(EulerRot::YXZ, fps.yaw, fps.pitch, 0.0);
+        //         t.rotation = rotation;
+
+        //         let forward = (rotation * Vec3::NEG_Z).normalize();
+        //         let right = (rotation * Vec3::X).normalize();
+
+        //         let mut direction = Vec3::ZERO;
+        //         if movement.forward {
+        //             direction += forward;
+        //         }
+                
+        //         if movement.backward {
+        //             direction -= forward;
+        //         }
+
+        //         if movement.left {
+        //             direction -= right;
+        //         }
+
+        //         if movement.right {
+        //             direction += right;
+        //         }
+
+        //         if direction.length_squared() > 0.0 {
+        //             t.translation += direction.normalize() * fps.move_speed;
+        //         }
+        //     });
+
+        //     let mut camera_translation = Vec3::ZERO;
+        //     world
+        //         .entity_from_id(self.persp_cam_id)
+        //         .get::<&Transform>(|cam_t| {
+        //             camera_translation = cam_t.translation;
+        //         });
+
+        //     world.query::<&mut Transform>()
+        //         .with(SkyboxTag)
+        //         .build()
+        //         .each(|t| {
+        //             t.translation = camera_translation;
+        //         });
+        // }
     }
 }
 
@@ -634,6 +605,66 @@ impl<V: VertexTrait, M: Material> Module for CameraMaterialModule<V, M> {
     }
 }
 
+#[derive(Component)]
+pub struct TestCubeModule;
+
+impl Module for TestCubeModule {
+    fn module(world: &World) {
+        let w = world.clone();
+        world.system::<(&mut RenderRegistry, &RenderSlot)>()
+            .kind(Setup)
+            .each(move |(registry, render_slot)| {
+                w.entity()
+                    .set(Mesh::<Vertex>::load_obj("assets/meshes/cube.obj"))
+                    .set(ColorMaterial::new(Color::CYAN, render_slot.device(), registry))
+                    .set(Transform::default());
+            });
+    }
+}
+
+#[derive(Component, Default)]
+pub struct MouseState {
+    pub last_pos: Option<Vec2>,
+    pub captured: bool,
+}
+
+impl MouseState {
+    pub fn new(captured: bool) -> Self {
+        Self {
+            last_pos: None,
+            captured,
+        }
+    }
+}
+
+#[derive(Component)]
+pub struct MouseCaptureModule;
+
+impl Module for MouseCaptureModule {
+    fn module(world: &World) {
+        world.component::<MouseState>().add_trait::<Singleton>();
+        world.set(MouseState::new(true));
+
+        world.system::<(&mut MouseState, &Keyboard, &mut Window)>()
+            .kind(Update)
+            .each(|(mouse, keyboard, window)| {
+                if !keyboard.just_pressed(Key::Escape) {
+                    return;
+                }
+
+                if mouse.captured {
+                    window.set_cursor_mode(CursorMode::Normal);
+                    mouse.captured = false;
+                } else {
+                    window.set_cursor_mode(CursorMode::Disabled);
+                    mouse.captured = true;
+                }
+
+                mouse.last_pos = None;
+            });
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     pretty_env_logger::formatted_builder()
         .filter_level(LevelFilter::Info)
@@ -648,10 +679,17 @@ fn main() -> anyhow::Result<()> {
         cursor_mode: CursorMode::Disabled,
     })?
         .import_module::<RenderRegistryModule>()
+
+        .import_module::<TestCubeModule>()
+
         .import_module::<CameraMaterialModule<GlyphVertex, TextMaterial>>()
         .import_module::<CameraMaterialModule<UiVertex, ColorUiMaterial>>()
         .import_module::<CameraMaterialModule<Vertex, ColorMaterial>>()
         .import_module::<CameraMaterialModule<Vertex, SkyboxMaterial>>()
+
+        .import_module::<FlyCameraModule>()
+
+        .import_module::<MouseCaptureModule>()
         // .load_plugin("test-plugin")?
         .run();
 
