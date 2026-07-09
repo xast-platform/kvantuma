@@ -25,8 +25,23 @@ impl Default for WindowDescriptor {
 
 #[derive(Debug, Clone, Copy, PartialEq, Component)]
 pub struct WindowSize {
-    pub width: f32,
-    pub height: f32,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+    pub(crate) is_changed: bool,
+}
+
+impl WindowSize {
+    pub fn is_changed(&self) -> bool {
+        self.is_changed
+    }
+    
+    pub fn width(&self) -> f32 {
+        self.width
+    }
+    
+    pub fn height(&self) -> f32 {
+        self.height
+    }
 }
 
 /// Singleton giving ECS systems access to the game window.

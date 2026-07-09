@@ -1467,6 +1467,7 @@ dependencies = [
  "flecs_ecs",
  "glam 0.32.0",
  "log",
+ "paste",
  "pretty_env_logger",
  "rand 0.10.1",
  "ron",

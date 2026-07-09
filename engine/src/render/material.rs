@@ -45,6 +45,14 @@ pub trait Material: ComponentId {
     fn cull_mode() -> Option<Face> {
         Some(Face::Back)
     }
+
+    fn load_op() -> LoadOp<GpuColor> {
+        LoadOp::Load
+    }
+
+    fn store_op() -> StoreOp {
+        StoreOp::Store
+    }
 }
 
 #[derive(Debug, Component)]
@@ -195,6 +203,10 @@ impl Material for SkyboxMaterial {
 
     fn cull_mode() -> Option<Face> {
         Some(Face::Front)
+    }
+
+    fn load_op() -> LoadOp<GpuColor> {
+        LoadOp::Clear(GpuColor::BLACK)
     }
 }
 

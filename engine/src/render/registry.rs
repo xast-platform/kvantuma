@@ -2,6 +2,9 @@ use std::{any::TypeId, collections::HashMap};
 
 use ab_glyph::FontRef;
 use bytemuck::Pod;
+use flecs_ecs::addons::Module;
+use flecs_ecs::core::World;
+use flecs_ecs::core::flecs::Singleton;
 use flecs_ecs::macros::Component;
 use image::ImageError;
 use slotmap::SlotMap;
@@ -19,6 +22,17 @@ use super::{
     shader_resource::ShaderResourceLayout,
     texture::{Texture, TextureHandle},
 };
+
+
+#[derive(Component)]
+pub struct RenderRegistryModule;
+
+impl Module for RenderRegistryModule {
+    fn module(world: &World) {
+        world.component::<RenderRegistry>().add_trait::<Singleton>();
+        world.set(RenderRegistry::new());
+    }
+}
 
 #[derive(Component, Default)]
 pub struct RenderRegistry {

@@ -2,7 +2,7 @@ use flecs_ecs::macros::Component;
 
 use crate::render::InstanceData;
 
-#[derive(Component)]
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub struct Transform {
     pub translation: glam::Vec3,
     pub rotation: glam::Quat,

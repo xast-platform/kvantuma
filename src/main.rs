@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, time::Instant};
+use std::{any::type_name, marker::PhantomData, process::id, time::Instant};
 
 use log::LevelFilter;
 use xastge::{
@@ -7,8 +7,8 @@ use xastge::{
             Action, CursorMode, Key, MouseButton, Window, WindowDescriptor, WindowEvent, WindowMode, WindowSize,
         },
     }, math::Transform, render::{
-        RenderDevice, RenderSurface, camera::{Camera, CameraBuffer, OrthographicCamera, PerspectiveCamera}, error::RenderError, material::{ColorMaterial, ColorUiMaterial, Material, SkyboxMaterial}, mesh::{Mesh, UiVertex, Vertex, VertexTrait}, pass::DrawDescriptor, registry::RenderRegistry, texture::TextureDescriptor, types::*, updated,
-    }, ui::{
+        Canvas, RenderDevice, RenderSurface, camera::{Camera, CameraBuffer, OrthographicCamera, PerspectiveCamera}, draw_context::DrawContext, error::RenderError, material::{ColorMaterial, ColorUiMaterial, Material, SkyboxMaterial}, mesh::{Mesh, UiVertex, Vertex, VertexTrait}, pass::DrawDescriptor, registry::{RenderRegistry, RenderRegistryModule}, texture::TextureDescriptor, types::*, updated,
+    }, time::TimeModule, ui::{
         atlas::{FontHandle, GlyphVertex},
         glyph::FontRef,
         material::TextMaterial,
@@ -35,18 +35,8 @@ use crate::{
     ui::{Ui, UiManager, UiScreen, components::{KirText, UiPosition}, key::ScreenKey},
 };
 
-// impl FlyCamera {
-//     pub fn forward(&self) -> Vec3 {
-//         (Quat::from_euler(EulerRot::YXZ, self.yaw, self.pitch, 0.0) * Vec3::NEG_Z)
-//             .normalize()
-//     }
-// }
-
 // #[derive(Component)]
 // pub struct MainFont(pub FontHandle);
-
-// #[derive(Component)]
-// pub struct SkyboxTag;
 
 // struct KvantumaGame {
 //     registry: RenderRegistry,
@@ -66,34 +56,6 @@ use crate::{
 
 // #[derive(Component)]
 // pub struct Unhovered;
-
-// #[derive(Component)]
-// pub struct Time {
-//     delta: f32,
-//     last_frame: Instant,
-// }
-
-// impl Default for Time {
-//     fn default() -> Self {
-//         Time { delta: 0.0, last_frame: Instant::now() }
-//     }
-// }
-
-// impl Time {
-//     pub fn new() -> Self {
-//         Time::default()
-//     }
-
-//     pub fn delta_time(&self) -> f32 {
-//         self.delta
-//     }
-
-//     pub fn update(&mut self, new: Instant) {
-//         let dt = (new - self.last_frame).as_secs_f32();
-//         self.last_frame = new;
-//         self.delta = dt;
-//     }
-// }
 
 // impl Game for KvantumaGame {
 //     fn init(&mut self, world: &mut World, render_device: &mut RenderDevice) -> anyhow::Result<()> {
@@ -126,10 +88,6 @@ use crate::{
 //     }
 
 //     fn update(&mut self, world: &mut World) -> anyhow::Result<()> {
-//         world.get::<&mut Time>(|time| {
-//             time.update(Instant::now());
-//         });
-
 //         for event in &self.current_event {
 //             match event {
 //                 UiEvent::Enter(enter) => {
@@ -271,10 +229,10 @@ impl<T: 'static + Send + Sync> Tween<T> {
 //                 if let Some(last) = mouse.last_pos {
 //                     let delta = current_pos - last;
 
-//                     world.each::<(&mut FlyCamera,)>(|(fps,)| {
-//                         fps.yaw   -= delta.x * fps.sensitivity;
-//                         fps.pitch -= delta.y * fps.sensitivity;
-//                         fps.pitch = fps.pitch.clamp(-1.54, 1.54);
+//                     world.each::<(&mut FlyCamera,)>(|(fly_cam,)| {
+//                         fly_cam.yaw   -= delta.x * fly_cam.sensitivity;
+//                         fly_cam.pitch -= delta.y * fly_cam.sensitivity;
+//                         fly_cam.pitch = fly_cam.pitch.clamp(-1.54, 1.54);
 //                     });
 //                 }
 
@@ -451,11 +409,21 @@ impl Ui for MyUi {
 }
 
 #[derive(Component)]
+pub struct SkyboxTag;
+
+#[derive(Component)]
 pub struct FlyCamera {
     pub yaw: f32,
     pub pitch: f32,
     pub sensitivity: f32,
     pub move_speed: f32,
+}
+
+impl FlyCamera {
+    pub fn forward(&self) -> Vec3 {
+        (Quat::from_euler(EulerRot::YXZ, self.yaw, self.pitch, 0.0) * Vec3::NEG_Z)
+            .normalize()
+    }
 }
 
 #[derive(Component, Debug, Default, Clone, Copy)]
@@ -480,7 +448,7 @@ impl Module for FlyCameraModule {
             .each(move |(registry, render_slot, size)| {
                 // Orthographic camera
                 w.entity()
-                    .set(OrthographicCamera::from_viewport(size.width, size.height))
+                    .set(OrthographicCamera::from_viewport(size.width(), size.height()))
                     .set(Camera::default())
                     .set(Transform {
                         translation: Vec3::new(0.0, 0.0, 1.0),
@@ -490,7 +458,7 @@ impl Module for FlyCameraModule {
 
                 // Perspective camera
                 w.entity()
-                    .set(PerspectiveCamera::from_aspect(size.width / size.height))
+                    .set(PerspectiveCamera::from_aspect(size.width() / size.height()))
                     .set(Camera::default())
                     .set(Transform {
                         translation: Vec3::new(5.0, 5.0, 5.0),
@@ -505,6 +473,7 @@ impl Module for FlyCameraModule {
                     });
             });
 
+        // Movement input processing
         world.system::<(&mut MovementInput, &Keyboard)>()
             .kind(Update)
             .each(|(input, keyboard)| {
@@ -512,98 +481,110 @@ impl Module for FlyCameraModule {
                 input.backward = keyboard.is_pressed(Key::S);
                 input.left = keyboard.is_pressed(Key::A);
                 input.right = keyboard.is_pressed(Key::D);
-
-                dbg!(input);
             });
             
-        // fn movement_system(
-        //     &self,
-        //     world: &World,
-        // ) {
-        //     let mut movement = MovementInput::default();
-        //     world.get::<&MovementInput>(|input| {
-        //         movement = *input;
-        //     });            
+        let query = world.query::<&mut Transform>()
+            .with(SkyboxTag)
+            .build();
 
-        //     world.each::<(&mut Transform, &FlyCamera, &Camera)>(|(t, fps, _)| {
-        //         let rotation = Quat::from_euler(EulerRot::YXZ, fps.yaw, fps.pitch, 0.0);
-        //         t.rotation = rotation;
+        world.system::<(&mut Transform, &FlyCamera, &MovementInput)>()
+            .kind(Update)
+            .with(Camera::id())
+            .each(move |(t, fly_cam, input)| {
+                dbg!(&t);
+                let rotation = Quat::from_euler(EulerRot::YXZ, fly_cam.yaw, fly_cam.pitch, 0.0);
+                t.rotation = rotation;
 
-        //         let forward = (rotation * Vec3::NEG_Z).normalize();
-        //         let right = (rotation * Vec3::X).normalize();
+                let forward = (rotation * Vec3::NEG_Z).normalize();
+                let right = (rotation * Vec3::X).normalize();
 
-        //         let mut direction = Vec3::ZERO;
-        //         if movement.forward {
-        //             direction += forward;
-        //         }
-                
-        //         if movement.backward {
-        //             direction -= forward;
-        //         }
-
-        //         if movement.left {
-        //             direction -= right;
-        //         }
-
-        //         if movement.right {
-        //             direction += right;
-        //         }
-
-        //         if direction.length_squared() > 0.0 {
-        //             t.translation += direction.normalize() * fps.move_speed;
-        //         }
-        //     });
-
-        //     let mut camera_translation = Vec3::ZERO;
-        //     world
-        //         .entity_from_id(self.persp_cam_id)
-        //         .get::<&Transform>(|cam_t| {
-        //             camera_translation = cam_t.translation;
-        //         });
-
-        //     world.query::<&mut Transform>()
-        //         .with(SkyboxTag)
-        //         .build()
-        //         .each(|t| {
-        //             t.translation = camera_translation;
-        //         });
-        // }
-    }
-}
-
-#[derive(Component)]
-pub struct RenderRegistryModule;
-
-impl Module for RenderRegistryModule {
-    fn module(world: &World) {
-        world.component::<RenderRegistry>().add_trait::<Singleton>();
-        world.set(RenderRegistry::new());
-    }
-}
-
-#[derive(Component, Default, Debug)]
-pub struct CameraMaterialModule<V: VertexTrait, M: Material>(PhantomData<(M, V)>);
-
-impl<V: VertexTrait, M: Material> Module for CameraMaterialModule<V, M> {
-    fn module(world: &World) {
-        world.system::<(Option<&mut RenderRegistry>, &RenderSlot)>()
-            .kind(Setup)
-            .each(|(maybe_registry, render_slot)| {
-                if let Some(registry) = maybe_registry {
-                    let camera_buffer = CameraBuffer::layout(render_slot.device());
-                    registry.register_material::<M>(render_slot.device(), &[&camera_buffer]);
-                } else {
-                    log::error!("No render registry found!");
+                let mut direction = Vec3::ZERO;
+                if input.forward {
+                    direction += forward;
                 }
-            });
+                
+                if input.backward {
+                    direction -= forward;
+                }
 
-        world.system::<(&Mesh<V>, &M, &Transform)>()
-            .kind(Render)
-            .each(|_| {
+                if input.left {
+                    direction -= right;
+                }
 
+                if input.right {
+                    direction += right;
+                }
+
+                if direction.length_squared() > 0.0 {
+                    t.translation += direction.normalize() * fly_cam.move_speed;
+                }
+
+                query.each(|skybox_t| {
+                    skybox_t.translation = t.translation;
+                });
             });
     }
 }
+
+#[macro_export]
+macro_rules! setup_material_module {
+    ($vertex:ident, $mat:ident) => { 
+        paste::paste! {
+            #[derive(Component, Default, Debug)]
+            pub struct [<$mat Module>];
+
+            impl Module for [<$mat Module>] {
+                fn module(world: &World) {
+                    world.system::<(Option<&mut RenderRegistry>, &RenderSlot)>()
+                        .kind(Setup)
+                        .each(|(maybe_registry, render_slot)| {
+                            if let Some(registry) = maybe_registry {
+                                let camera_buffer = CameraBuffer::layout(render_slot.device());
+                                registry.register_material::<$mat>(render_slot.device(), &[&camera_buffer]);
+                            } else {
+                                panic!("No render registry found while registering `{}`!", type_name::<$mat>());
+                            }
+                        });
+
+                    let query = world.query::<&CameraBuffer>()
+                        .with(PerspectiveCamera::id())
+                        .build();
+
+                    world.system::<(
+                        &Mesh<$vertex>, &$mat, &Transform,
+                        &mut RenderSlot, &RenderRegistry,
+                    )>()
+                        .kind(Render)
+                        .each(move |(mesh, mat, t, slot, registry)| {
+                            query.each(|cam_buffer| {    
+                                let (device, canvas, ctx) = slot.parts_mut();
+                                let canvases: &[&dyn RenderSurface] = &[canvas];
+                                let mut render_pass = ctx.render_pass(
+                                    canvases, 
+                                    device.depth_texture(),
+                                    Operations {
+                                        load: $mat::load_op(),
+                                        store: $mat::store_op(),
+                                    },
+                                );
+                                render_pass.draw(device, registry, DrawDescriptor::<_, _> {
+                                    drawable: Some(mesh),
+                                    instance_data: Some(t),
+                                    global_shader_resources: &[cam_buffer.resource()],
+                                    material: mat,
+                                });
+                            });
+                        });
+                }
+            }
+        }
+    };
+}
+
+setup_material_module!(Vertex, ColorMaterial);
+setup_material_module!(GlyphVertex, TextMaterial);
+setup_material_module!(UiVertex, ColorUiMaterial);
+setup_material_module!(Vertex, SkyboxMaterial);
 
 #[derive(Component)]
 pub struct TestCubeModule;
@@ -611,11 +592,11 @@ pub struct TestCubeModule;
 impl Module for TestCubeModule {
     fn module(world: &World) {
         let w = world.clone();
-        world.system::<(&mut RenderRegistry, &RenderSlot)>()
+        world.system::<(&mut RenderRegistry, &mut RenderSlot)>()
             .kind(Setup)
             .each(move |(registry, render_slot)| {
                 w.entity()
-                    .set(Mesh::<Vertex>::load_obj("assets/meshes/cube.obj"))
+                    .set(updated(Mesh::load_obj("assets/meshes/cube.obj"), render_slot.device_mut(), registry))
                     .set(ColorMaterial::new(Color::CYAN, render_slot.device(), registry))
                     .set(Transform::default());
             });
@@ -678,18 +659,15 @@ fn main() -> anyhow::Result<()> {
         mode: WindowMode::Windowed,
         cursor_mode: CursorMode::Disabled,
     })?
+        .import_module::<TimeModule>()
         .import_module::<RenderRegistryModule>()
-
         .import_module::<TestCubeModule>()
-
-        .import_module::<CameraMaterialModule<GlyphVertex, TextMaterial>>()
-        .import_module::<CameraMaterialModule<UiVertex, ColorUiMaterial>>()
-        .import_module::<CameraMaterialModule<Vertex, ColorMaterial>>()
-        .import_module::<CameraMaterialModule<Vertex, SkyboxMaterial>>()
-
         .import_module::<FlyCameraModule>()
-
         .import_module::<MouseCaptureModule>()
+
+        .import_module::<ColorUiMaterialModule>()
+        .import_module::<ColorMaterialModule>()
+        .import_module::<TextMaterialModule>()
         // .load_plugin("test-plugin")?
         .run();
 

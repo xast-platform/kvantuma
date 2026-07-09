@@ -68,6 +68,22 @@ pub struct RenderSlot {
 }
 
 impl RenderSlot {
+    pub fn parts(&self) -> (&RenderDevice, &Canvas, &DrawContext) {
+        (
+            self.render_device.as_ref().expect("RenderDevice is only available while the Setup or Render pipeline runs"),
+            self.canvas.as_ref().expect("Canvas is only available while the Render pipeline runs"),
+            self.draw_context.as_ref().expect("DrawContext is only available while the Render pipeline runs"),
+        )
+    }
+
+    pub fn parts_mut(&mut self) -> (&mut RenderDevice, &mut Canvas, &mut DrawContext) {
+        (
+            self.render_device.as_mut().expect("RenderDevice is only available while the Setup or Render pipeline runs"),
+            self.canvas.as_mut().expect("Canvas is only available while the Render pipeline runs"),
+            self.draw_context.as_mut().expect("DrawContext is only available while the Render pipeline runs"),
+        )
+    }
+
     #[inline]
     pub fn device(&self) -> &RenderDevice {
         self.render_device.as_ref().expect("RenderDevice is only available while the Setup or Render pipeline runs")
@@ -135,11 +151,11 @@ impl XastGE {
         world.set(WindowSize {
             width: desc.width as f32,
             height: desc.height as f32,
+            is_changed: false,
         });
 
         world.component::<Window>().add_trait::<Singleton>();
         world.set(Window::default());
-
 
         world.component::<Keyboard>().add_trait::<Singleton>();
         world.set(Keyboard::default());
@@ -240,13 +256,16 @@ impl XastGE {
 
                     let window = g.game.world.get::<&mut Window>(|w| w.take());
                     g.window = Some(window);
-                },
-                render: |g| {
-                    g.game.world.get::<(&mut Keyboard, &mut Mouse)>(|(kb, mouse)| {
+
+                    // `next_frame` can run several fixed Update ticks per rendered frame;
+                    // clear the flags here so each tick only observes once.
+                    g.game.world.get::<(&mut Keyboard, &mut Mouse, &mut WindowSize)>(|(kb, mouse, size)| {
                         kb.clear_frame();
                         mouse.clear_frame();
+                        size.is_changed = false;
                     });
-
+                },
+                render: |g| {
                     let device = g.game.render_device.take()
                         .expect("RenderDevice is missing outside the Render pipeline");
 
@@ -306,6 +325,7 @@ impl XastGE {
                             g.game.world.get::<&mut WindowSize>(|wsize| {
                                 wsize.width = *w as f32;
                                 wsize.height = *h as f32;
+                                wsize.is_changed = true;
                             });
                         }
                         // Other events

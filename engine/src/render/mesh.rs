@@ -21,7 +21,7 @@ pub struct UiVertex {
 }
 
 // TODO: VertexTrait
-pub trait VertexTrait: 'static + Send + Sync {}
+pub trait VertexTrait: Pod + 'static + Send + Sync {}
 impl VertexTrait for UiVertex {}
 impl VertexTrait for Vertex {}
 impl VertexTrait for GlyphVertex {}

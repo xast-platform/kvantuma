@@ -6,6 +6,7 @@ pub mod error;
 pub mod utils;
 pub mod plugin;
 pub mod math;
+pub mod time;
 
 use flecs_ecs::macros::Component;
 
