@@ -1,4 +1,5 @@
 use std::{collections::{BTreeMap, HashMap}, hash::Hash};
+use parking_lot::Mutex;
 
 use glam::{Vec2, Vec3};
 use taffy::{AlignItems, AvailableSpace, Dimension, FlexDirection, JustifyContent, LengthPercentage, NodeId, Size, Style as TaffyStyle, TaffyTree};
@@ -26,7 +27,11 @@ pub struct Style {
     pub justify_content: Option<JustifyContent>,
 }
 
-pub struct UiManager<K> {
+pub trait ScreenKey: Hash + Eq + Copy + ComponentId {}
+impl<K: Hash + Eq + Copy + ComponentId> ScreenKey for K {}
+
+#[derive(Component)]
+pub struct UiManager<K: ScreenKey> {
     screens: HashMap<K, UiScreen>,
     current_screen: Option<K>,
     screen_width: f32,
@@ -35,7 +40,7 @@ pub struct UiManager<K> {
     hovered: Option<Entity>,
 }
 
-impl<K: Hash + Eq + Copy> UiManager<K> {
+impl<K: ScreenKey> UiManager<K> {
     pub fn new(screen_width: f32, screen_height: f32) -> Self {
         Self {
             screens: HashMap::new(),
@@ -182,7 +187,7 @@ impl<K: Hash + Eq + Copy> UiManager<K> {
 }
 
 pub struct UiScreen {
-    tree: TaffyTree<()>,
+    tree: Mutex<TaffyTree<()>>,
     node: Option<NodeId>,
     root: Entity,
     entity_to_node: BTreeMap<Entity, NodeId>,
@@ -190,10 +195,13 @@ pub struct UiScreen {
     screen_height: f32,
 }
 
+unsafe impl Send for UiScreen {}
+unsafe impl Sync for UiScreen {}
+
 impl UiScreen {
     pub fn new(root: Entity) -> Self {
         Self {
-            tree: TaffyTree::new(),
+            tree: Mutex::new(TaffyTree::new()),
             node: None,
             root,
             entity_to_node: BTreeMap::new(),
@@ -209,13 +217,14 @@ impl UiScreen {
         screen_height: f32,
         font_atlas: &Atlas,
     ) {
+        let mut tree = self.tree.lock();
+        *tree = TaffyTree::new();
         self.screen_height = screen_height;
-        self.tree = TaffyTree::new();
         self.entity_to_node.clear();
-        self.node = Some(compute_layout(world, &mut self.tree, self.root, &mut self.entity_to_node, font_atlas));
+        self.node = Some(compute_layout(world, &mut tree, self.root, &mut self.entity_to_node, font_atlas));
         
         if let Some(root_node_id) = self.node {
-            self.tree.compute_layout(
+            tree.compute_layout(
                 root_node_id,
                 Size { 
                     width: AvailableSpace::Definite(screen_width), 
@@ -229,18 +238,42 @@ impl UiScreen {
         self.entity_rects.clear();
 
         if let Some(root_node) = self.node {
-            self.apply_layout_recursive(world, root_node, 0.0, 0.0);
+            self.apply_layout(world, root_node, 0.0, 0.0);
         }
     }
 
-    fn apply_layout_recursive(&mut self, world: &World, node_id: NodeId, parent_x: f32, parent_y: f32) {
-        if let Ok(layout) = self.tree.layout(node_id) {
+    fn apply_layout(&mut self, world: &World, node_id: NodeId, parent_x: f32, parent_y: f32) {
+        let mut tree = self.tree.lock();
+        Self::apply_layout_recursive(
+            &mut tree, 
+            &self.entity_to_node, 
+            &mut self.entity_rects, 
+            self.screen_height, 
+            world, 
+            node_id, 
+            parent_x, 
+            parent_y,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn apply_layout_recursive(
+        tree: &mut TaffyTree<()>,
+        entity_to_node: &BTreeMap<Entity, NodeId>,
+        entity_rects: &mut Vec<UiRect>,
+        screen_height: f32, 
+        world: &World, 
+        node_id: NodeId, 
+        parent_x: f32, 
+        parent_y: f32,
+    ) {
+        if let Ok(layout) = tree.layout(node_id) {
             let abs_x = parent_x + layout.location.x;
             let abs_y = parent_y + layout.location.y;
             
-            for (entity, entity_node_id) in &self.entity_to_node {
+            for (entity, entity_node_id) in entity_to_node {
                 if *entity_node_id == node_id {
-                    let screen_y = self.screen_height - abs_y - layout.size.height;
+                    let screen_y = screen_height - abs_y - layout.size.height;
 
                     let rect = Rect {
                         x: abs_x,
@@ -249,7 +282,7 @@ impl UiScreen {
                         h: layout.size.height,
                     };
 
-                    self.entity_rects.push(UiRect {
+                    entity_rects.push(UiRect {
                         entity: *entity,
                         rect,
                     });
@@ -264,9 +297,18 @@ impl UiScreen {
                 }
             }
             
-            if let Ok(children) = self.tree.children(node_id) {
+            if let Ok(children) = tree.children(node_id) {
                 for child_id in children {
-                    self.apply_layout_recursive(world, child_id, abs_x, abs_y);
+                    Self::apply_layout_recursive(
+                        tree,
+                        entity_to_node,
+                        entity_rects,
+                        screen_height,
+                        world,
+                        child_id, 
+                        abs_x, 
+                        abs_y,
+                    );
                 }
             }
         }

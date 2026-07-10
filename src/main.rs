@@ -1,4 +1,4 @@
-use std::any::type_name;
+use std::{any::type_name, marker::PhantomData};
 use log::LevelFilter;
 use xastge::{
     Render, Setup, Update,
@@ -29,15 +29,14 @@ use xastge::{
     }, 
     utils::{Color, Translation},
 };
-use glam::{DVec2, EulerRot, Quat, Vec3};
+use glam::{DVec2, EulerRot, Quat, Vec2, Vec3};
 use flecs_ecs::{core::flecs::Singleton, prelude::*, sys::{ecs_entity_t, ecs_world_t}};
 
 use crate::{
-    systems::ui::render_ui_text,
-    ui::{Ui, UiManager, UiScreen, components::{KirText, UiPosition}, key::ScreenKey},
+    systems::ui::render_ui_text, ui::{ScreenKey, Ui, UiManager, UiScreen, components::{KirText, UiPosition}, key::Screen},
 };
 
-pub type KvUiManager = UiManager<ScreenKey>;
+pub type KvUiManager = UiManager<Screen>;
 
 pub mod game;
 pub mod menu;
@@ -139,6 +138,7 @@ pub mod singletons;
 
 //         Ok(())
 //     }
+
 //     fn render(&mut self, world: &mut World, render_device: &mut RenderDevice) -> Result<(), RenderError> {        
 //         if self.ui_manager.is_dirty() {
 //             let size = render_device.size();
@@ -157,6 +157,32 @@ pub mod singletons;
 //         Ok(())
 //     }
 // }
+
+#[derive(Component)]
+pub struct UiModule<K: ScreenKey>(PhantomData<K>);
+
+impl<K: ScreenKey> Module for UiModule<K> {
+    fn module(world: &World) {
+        // Init UiManager
+        let mut screen_size = Vec2::default();
+        world.get::<&WindowSize>(|size| {
+            screen_size.x = size.width();
+            screen_size.y = size.height();
+        });
+
+        world.component::<UiManager<K>>().add_trait::<Singleton>();
+        world.set(UiManager::<K>::new(screen_size.x, screen_size.y));
+
+        // Resize UiManager
+        world.system::<(&WindowSize, &mut UiManager<K>)>()
+            .kind(Update)
+            .each(|(size, ui_manager)| {               
+                if size.is_changed() {
+                    ui_manager.mark_dirty();
+                }
+            });
+    }
+}
 
 #[derive(Component, Default, Debug, Clone, Copy)]
 pub struct Tween<T: 'static + Send + Sync> {
@@ -224,6 +250,65 @@ pub struct MovementInput {
 }
 
 #[derive(Component)]
+pub struct GenericCameraModule;
+
+impl Module for GenericCameraModule {
+    fn module(world: &World) {
+        // Resize cameras
+        let ort_query = world.query::<&mut OrthographicCamera>()
+            .with(Camera::id())
+            .build();
+
+        let persp_query = world.query::<&mut PerspectiveCamera>()
+            .with(Camera::id())
+            .build();
+
+        world.system::<&WindowSize>()
+            .kind(Update)
+            .each(move |size| {               
+                if size.is_changed() {
+                    ort_query.each(|ort_cam| {
+                        ort_cam.resize_viewport(size.width(), size.height());
+                    });
+                    persp_query.each(|persp_cam| {
+                        persp_cam.set_aspect(size.width() / size.height());
+                    });
+                }                
+            });
+
+        // Update camera buffers
+        let ort_query = world.query::<(&Camera, &OrthographicCamera, &Transform, &CameraBuffer)>().build();
+        let persp_query = world.query::<(&Camera, &PerspectiveCamera, &Transform, &CameraBuffer)>().build();
+
+        world.system::<(&RenderSlot, &RenderRegistry)>()
+            .kind(Render)
+            .each(move |(render_slot, registry)| {
+                ort_query.each(|(cam, ort_cam, t, buf)| {
+                    let uniform = build_orthographic_uniform(cam, ort_cam, t);
+                    if let Some(buf) = registry.get_buffer(buf.handle()) {
+                        buf.fill_exact(render_slot.device(), 0, &[uniform]).unwrap_or_else(|e| {
+                            log::error!("{e}");
+                        });
+                    } else {
+                        log::error!("Camera buffer not found in registry");
+                    }
+                });
+
+                persp_query.each(|(cam, persp_cam, t, buf)| {
+                    let uniform = build_perspective_uniform(cam, persp_cam, t);
+                    if let Some(buf) = registry.get_buffer(buf.handle()) {
+                        buf.fill_exact(render_slot.device(), 0, &[uniform]).unwrap_or_else(|e| {
+                            log::error!("{e}");
+                        });
+                    } else {
+                        log::error!("Camera buffer not found in registry");
+                    }
+                });
+            });
+    }
+}
+
+#[derive(Component)]
 pub struct FlyCameraModule;
 
 impl Module for FlyCameraModule {
@@ -266,28 +351,6 @@ impl Module for FlyCameraModule {
                     });
             });
 
-        // Resize cameras
-        let ort_query = world.query::<&mut OrthographicCamera>()
-            .with(Camera::id())
-            .build();
-
-        let persp_query = world.query::<&mut PerspectiveCamera>()
-            .with(Camera::id())
-            .build();
-
-        world.system::<&WindowSize>()
-            .kind(Update)
-            .each(move |size| {               
-                ort_query.each(|ort_cam| {
-                    ort_cam.resize_viewport(size.width(), size.height());
-                });
-                persp_query.each(|persp_cam| {
-                    persp_cam.set_aspect(size.width() / size.height());
-                });
-                
-                // TODO: self.ui_manager.mark_dirty();
-            });
-
         // Movement input processing
         let query = world.query::<&mut FlyCamera>().build();
         world.system::<(&mut MovementInput, &Keyboard, &Mouse, &mut MouseState, &mut Window)>()
@@ -311,27 +374,27 @@ impl Module for FlyCameraModule {
                 input.right = keyboard.is_pressed(Key::D);
 
                 let current_pos = mouse.position();
-                    if mouse_state.captured {
-                        // Rotate camera
-                        if let Some(last) = mouse_state.last_pos {
-                            let delta = current_pos - last;
+                if mouse_state.captured {
+                    // Rotate camera
+                    if let Some(last) = mouse_state.last_pos {
+                        let delta = current_pos - last;
 
-                            query.each(|fly_cam| {
-                                fly_cam.yaw   -= (delta.x as f32) * fly_cam.sensitivity;
-                                fly_cam.pitch -= (delta.y as f32) * fly_cam.sensitivity;
-                                fly_cam.pitch = fly_cam.pitch.clamp(-1.54, 1.54);
-                            });
-                        }
-
-                        mouse_state.last_pos = Some(current_pos);
-                    } else {
-                        // TODO: Move cursor
-                        // self.current_event.extend(self.ui_manager.hit_test(
-                        //     current_pos,
-                        //     UiEvent::Enter,
-                        //     UiEvent::Exit,
-                        // ));
+                        query.each(|fly_cam| {
+                            fly_cam.yaw   -= (delta.x as f32) * fly_cam.sensitivity;
+                            fly_cam.pitch -= (delta.y as f32) * fly_cam.sensitivity;
+                            fly_cam.pitch = fly_cam.pitch.clamp(-1.54, 1.54);
+                        });
                     }
+
+                    mouse_state.last_pos = Some(current_pos);
+                } else {
+                    // TODO: Move cursor
+                    // self.current_event.extend(self.ui_manager.hit_test(
+                    //     current_pos,
+                    //     UiEvent::Enter,
+                    //     UiEvent::Exit,
+                    // ));
+                }
             });
             
         // Update camera transformation
@@ -372,36 +435,6 @@ impl Module for FlyCameraModule {
 
                 query.each(|skybox_t| {
                     skybox_t.translation = t.translation;
-                });
-            });
-
-        // Update camera buffers
-        let ort_query = world.query::<(&Camera, &OrthographicCamera, &Transform, &CameraBuffer)>().build();
-        let persp_query = world.query::<(&Camera, &PerspectiveCamera, &Transform, &CameraBuffer)>().build();
-
-        world.system::<(&RenderSlot, &RenderRegistry)>()
-            .kind(Render)
-            .each(move |(render_slot, registry)| {
-                ort_query.each(|(cam, ort_cam, t, buf)| {
-                    let uniform = build_orthographic_uniform(cam, ort_cam, t);
-                    if let Some(buf) = registry.get_buffer(buf.handle()) {
-                        buf.fill_exact(render_slot.device(), 0, &[uniform]).unwrap_or_else(|e| {
-                            log::error!("{e}");
-                        });
-                    } else {
-                        log::error!("Camera buffer not found in registry");
-                    }
-                });
-
-                persp_query.each(|(cam, persp_cam, t, buf)| {
-                    let uniform = build_perspective_uniform(cam, persp_cam, t);
-                    if let Some(buf) = registry.get_buffer(buf.handle()) {
-                        buf.fill_exact(render_slot.device(), 0, &[uniform]).unwrap_or_else(|e| {
-                            log::error!("{e}");
-                        });
-                    } else {
-                        log::error!("Camera buffer not found in registry");
-                    }
                 });
             });
     }
@@ -553,6 +586,7 @@ fn main() -> anyhow::Result<()> {
         .import_module::<RenderRegistryModule>()
         .import_module::<TestCubeModule>()
         .import_module::<FlyCameraModule>()
+        .import_module::<GenericCameraModule>()
 
         .import_module::<SkyboxMaterialModule>()
         .import_module::<ColorUiMaterialModule>()
