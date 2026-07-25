@@ -95,7 +95,7 @@ impl SkinnedVertex {
     }
 }
 
-#[derive(Debug, Component)]
+#[derive(Debug, Component, Clone)]
 pub struct Mesh<V: Send + Sync + 'static> {
     pub vertices: Vec<V>,
     pub indices: Vec<u32>,

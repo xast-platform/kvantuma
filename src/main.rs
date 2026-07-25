@@ -2,16 +2,13 @@ use std::{any::type_name, marker::PhantomData};
 use log::LevelFilter;
 use taffy::TaffyTree;
 use xastge::{
-    Render, Setup, Update,
-    app::{
+    Render, Setup, Update, app::{
         RenderSlot, XastGE, 
         input::{Keyboard, Mouse}, 
         window::{
             Action, CursorMode, Key, MouseButton, Window, WindowDescriptor, WindowEvent, WindowMode, WindowSize,
         },
-    }, 
-    math::Transform, 
-    render::{
+    }, math::Transform, physics::{components::{ColliderDescriptor, ColliderKind, RigidBodyDescriptor, RigidBodyKind}, module::PhysicsModule}, render::{
         RenderSurface, 
         camera::{Camera, CameraBuffer, OrthographicCamera, PerspectiveCamera, build_orthographic_uniform, build_perspective_uniform}, 
         material::{ColorMaterial, ColorUiMaterial, Material, SkyboxMaterial}, 
@@ -21,14 +18,11 @@ use xastge::{
         texture::TextureDescriptor, 
         types::*, 
         updated,
-    },
-    time::TimeModule, 
-    ui::{
+    }, time::TimeModule, ui::{
         atlas::{FontHandle, GlyphVertex},
         glyph::FontRef,
         material::TextMaterial,
-    }, 
-    utils::{Color, Translation},
+    }, utils::{Color, Translation},
 };
 use glam::{DVec2, EulerRot, Quat, Vec2, Vec3};
 use flecs_ecs::{core::flecs::Singleton, prelude::*, sys::{ecs_entity_t, ecs_world_t}};
@@ -512,10 +506,32 @@ impl Module for TestCubeModule {
         world.system::<(&mut RenderRegistry, &mut RenderSlot)>()
             .kind(Setup)
             .each(move |(registry, render_slot)| {
+                let cube_mesh = Mesh::load_obj("assets/meshes/cube.obj");
+                
                 w.entity()
-                    .set(updated(Mesh::load_obj("assets/meshes/cube.obj"), render_slot.device_mut(), registry))
+                    .set(updated(cube_mesh.clone(), render_slot.device_mut(), registry))
                     .set(ColorMaterial::new(Color::CYAN, render_slot.device(), registry))
-                    .set(Transform::default());
+                    .set(Transform::default())
+                    .set(RigidBodyDescriptor {
+                        kind: RigidBodyKind::Dynamic,
+                    })
+                    .set(ColliderDescriptor {
+                        kind: ColliderKind::Cuboid { width: 1.0, height: 1.0, depth: 1.0 },
+                    });
+
+                w.entity()
+                    .set(updated(cube_mesh, render_slot.device_mut(), registry))
+                    .set(ColorMaterial::new(Color::GREEN, render_slot.device(), registry))
+                    .set(Transform {
+                        translation: Vec3::new(1.0, -4.0, 0.0),
+                        ..Default::default()
+                    })
+                    .set(RigidBodyDescriptor {
+                        kind: RigidBodyKind::Static,
+                    })
+                    .set(ColliderDescriptor {
+                        kind: ColliderKind::Cuboid { width: 1.0, height: 1.0, depth: 1.0},
+                    });
             });
     }
 }
@@ -595,6 +611,7 @@ fn main() -> anyhow::Result<()> {
         .import_module::<TextMaterialModule>()
 
         .import_module::<InitSkyboxModule>()
+        .import_module::<PhysicsModule>()
         // .load_plugin("test-plugin")?
         .run();
 
