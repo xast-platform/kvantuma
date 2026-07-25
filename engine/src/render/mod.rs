@@ -1,4 +1,5 @@
 use bytemuck::Pod;
+use flecs_ecs::macros::Component;
 use glam::{IVec2, Quat, UVec2, Vec3};
 use glfw::Window;
 use serde::{Deserialize, Serialize};
@@ -206,6 +207,7 @@ pub trait RenderSurface {
 }
 
 /// Represents the canvas used for rendering.
+#[derive(Debug, Component)]
 pub struct Canvas {
     texture: wgpu::SurfaceTexture,
     view: wgpu::TextureView,

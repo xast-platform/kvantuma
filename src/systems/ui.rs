@@ -1,6 +1,6 @@
 use flecs_ecs::prelude::*;
 use xastge::{
-    Transform, render::{RenderDevice, mesh::Mesh, registry::RenderRegistry, updated}, ui::{atlas::{FontHandle, GlyphVertex}, material::TextMaterial}, utils::Color,
+    math::Transform, render::{RenderDevice, mesh::Mesh, registry::RenderRegistry, updated}, ui::{atlas::{FontHandle, GlyphVertex}, material::TextMaterial}, utils::Color,
 };
 use glam::{Vec2, Vec3, Quat};
 

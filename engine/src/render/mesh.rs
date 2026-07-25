@@ -2,7 +2,7 @@ use bytemuck::{Pod, Zeroable};
 use flecs_ecs::macros::Component;
 use glam::{Vec2, Vec3, Vec4};
 
-use crate::utils::Rect;
+use crate::{ui::atlas::GlyphVertex, utils::Rect};
 
 use super::{Drawable, RenderDevice, buffer::BufferHandle, registry::RenderRegistry, types::*};
 
@@ -19,6 +19,12 @@ pub struct Vertex {
 pub struct UiVertex {
     pub pos: Vec2,
 }
+
+// TODO: VertexTrait
+pub trait VertexTrait: Pod + 'static + Send + Sync {}
+impl VertexTrait for UiVertex {}
+impl VertexTrait for Vertex {}
+impl VertexTrait for GlyphVertex {}
 
 impl UiVertex {
     const ATTRIBS: &[wgpu::VertexAttribute] = &wgpu::vertex_attr_array![
@@ -89,7 +95,7 @@ impl SkinnedVertex {
     }
 }
 
-#[derive(Debug, Component)]
+#[derive(Debug, Component, Clone)]
 pub struct Mesh<V: Send + Sync + 'static> {
     pub vertices: Vec<V>,
     pub indices: Vec<u32>,

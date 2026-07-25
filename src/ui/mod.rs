@@ -1,10 +1,9 @@
 use std::{collections::{BTreeMap, HashMap}, hash::Hash};
-
 use glam::{Vec2, Vec3};
 use taffy::{AlignItems, AvailableSpace, Dimension, FlexDirection, JustifyContent, LengthPercentage, NodeId, Size, Style as TaffyStyle, TaffyTree};
 use flecs_ecs::prelude::*;
 use components::*;
-use xastge::{Transform, render::{RenderDevice, material::ColorUiMaterial, mesh::{Mesh, UiVertex}, registry::RenderRegistry, updated}, ui::atlas::Atlas, utils::Rect};
+use xastge::{math::Transform, render::{RenderDevice, material::ColorUiMaterial, mesh::{Mesh, UiVertex}, registry::RenderRegistry, updated}, ui::atlas::Atlas, utils::Rect};
 
 pub mod key;
 pub mod msg;
@@ -26,7 +25,11 @@ pub struct Style {
     pub justify_content: Option<JustifyContent>,
 }
 
-pub struct UiManager<K> {
+pub trait ScreenKey: Hash + Eq + Copy + ComponentId {}
+impl<K: Hash + Eq + Copy + ComponentId> ScreenKey for K {}
+
+#[derive(Component)]
+pub struct UiManager<K: ScreenKey> {
     screens: HashMap<K, UiScreen>,
     current_screen: Option<K>,
     screen_width: f32,
@@ -35,7 +38,7 @@ pub struct UiManager<K> {
     hovered: Option<Entity>,
 }
 
-impl<K: Hash + Eq + Copy> UiManager<K> {
+impl<K: ScreenKey> UiManager<K> {
     pub fn new(screen_width: f32, screen_height: f32) -> Self {
         Self {
             screens: HashMap::new(),
@@ -189,6 +192,20 @@ pub struct UiScreen {
     entity_rects: Vec<UiRect>,
     screen_height: f32,
 }
+
+#[expect(unsafe_code, reason = "TaffyTree is safe without the calc feature")]
+/// SAFETY:
+/// Taffy's !Send/!Sync comes from internal tagged pointer optimizations.
+/// The `calc` feature, which introduces actual thread-unsafety, is disabled
+/// in this project.
+unsafe impl Send for UiScreen {}
+
+#[expect(unsafe_code, reason = "TaffyTree is safe without the calc feature")]
+/// SAFETY:
+/// Taffy's !Send/!Sync comes from internal tagged pointer optimizations.
+/// The `calc` feature, which introduces actual thread-unsafety, is disabled
+/// in this project.
+unsafe impl Sync for UiScreen {}
 
 impl UiScreen {
     pub fn new(root: Entity) -> Self {

@@ -1,3 +1,4 @@
+use flecs_ecs::core::component_registration::ComponentId;
 use flecs_ecs::macros::Component;
 use glam::Vec3;
 use image::ImageError;
@@ -12,7 +13,7 @@ use crate::utils::Color;
 use super::{shader_resource::{ShaderResource, ShaderResourceLayout}, registry::RenderRegistry, texture::TextureHandle};
 use super::types::*;
 
-pub trait Material {
+pub trait Material: ComponentId {
     fn shader() -> ShaderModuleDescriptor<'static>;
 
     fn vertex_layout() -> Option<VertexBufferLayout<'static>>;
@@ -44,9 +45,17 @@ pub trait Material {
     fn cull_mode() -> Option<Face> {
         Some(Face::Back)
     }
+
+    fn load_op() -> LoadOp<GpuColor> {
+        LoadOp::Load
+    }
+
+    fn store_op() -> StoreOp {
+        StoreOp::Store
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Component)]
 pub struct TintedTextureMaterial {
     pub albedo: TextureHandle,
     pub tint: Vec3,
@@ -194,6 +203,10 @@ impl Material for SkyboxMaterial {
 
     fn cull_mode() -> Option<Face> {
         Some(Face::Front)
+    }
+
+    fn load_op() -> LoadOp<GpuColor> {
+        LoadOp::Clear(GpuColor::BLACK)
     }
 }
 

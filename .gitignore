@@ -1,3 +1,6 @@
 /target
 /engine/target
 /scene/target
+/assets/plugins/*.so
+/assets/plugins/*.dll
+Cargo.lock

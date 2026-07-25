@@ -1,3 +1,5 @@
+use std::ops::{Deref, DerefMut};
+
 use flecs_ecs::macros::Component;
 use glfw::{GlfwReceiver, PWindow};
 
@@ -23,21 +25,53 @@ impl Default for WindowDescriptor {
 
 #[derive(Debug, Clone, Copy, PartialEq, Component)]
 pub struct WindowSize {
-    pub width: f32,
-    pub height: f32,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+    pub(crate) is_changed: bool,
 }
 
-pub struct WindowController<'a> {
-    window: &'a mut PWindow,
+impl WindowSize {
+    #[inline]
+    pub fn is_changed(&self) -> bool {
+        self.is_changed
+    }
+    
+    #[inline]
+    pub fn width(&self) -> f32 {
+        self.width
+    }
+    
+    #[inline]
+    pub fn height(&self) -> f32 {
+        self.height
+    }
 }
 
-impl<'a> WindowController<'a> {
-    pub fn new(window: &'a mut PWindow) -> Self {
-        Self { window }
+/// Singleton giving ECS systems access to the game window.
+#[derive(Component, Default)]
+pub struct Window(Option<PWindow>);
+
+impl Window {
+    pub(crate) fn install(&mut self, window: PWindow) {
+        self.0 = Some(window);
     }
 
-    pub fn set_cursor_mode(&mut self, mode: glfw::CursorMode) {
-        self.window.set_cursor_mode(mode);
+    pub(crate) fn take(&mut self) -> PWindow {
+        self.0.take().expect("Window is only available while the Update pipeline runs")
+    }
+}
+
+impl Deref for Window {
+    type Target = PWindow;
+
+    fn deref(&self) -> &PWindow {
+        self.0.as_ref().expect("Window is only available while the Update pipeline runs")
+    }
+}
+
+impl DerefMut for Window {
+    fn deref_mut(&mut self) -> &mut PWindow {
+        self.0.as_mut().expect("Window is only available while the Update pipeline runs")
     }
 }
 

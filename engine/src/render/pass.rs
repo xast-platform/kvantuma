@@ -55,11 +55,11 @@ pub struct DrawDescriptor<'a, 'b, T, M: Material> {
 }
 
 impl<'a> RenderPass<'a> {
-    pub fn draw<T: Pod, M: Material + 'static>(
+    pub fn draw<'mat, 'other, T: Pod, M: Material + 'static>(
         &mut self,
         render_device: &RenderDevice,
         registry: &RenderRegistry,
-        descriptor: DrawDescriptor<'a, '_, T, M>,
+        descriptor: DrawDescriptor<'mat, 'other, T, M>,
     ) {
         let shader_resource = descriptor.material.shader_resource(render_device, registry);
         let Some(pipeline) = registry.get_pipeline::<M>() else {

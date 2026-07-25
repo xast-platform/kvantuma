@@ -10,22 +10,31 @@ bincode = "2.0.1"
 bitflags = "2.11.0"
 bytemuck = { version = "1.25.0", features = ["derive"] }
 flecs_ecs = "0.2.2"
-glam = { version = "0.32.0", features = ["serde", "bytemuck", "rand"] }
+glam = { version = "0.33.2", features = ["serde", "bytemuck", "rand"] }
 gltf = { version = "1.4.1", features = ["extras"] }
 image = "0.25.9"
 kira = "0.12.0"
+libloading = "0.9.0"
 log = "0.4.29"
 parking_lot = "0.12.5"
 paste = "1.0.15"
 pollster = "0.4.0"
 pretty-type-name = "1.0.1"
 rand = "0.10.0"
-rapier3d = { version = "0.32.0", features = ["debug-render"] }
+rapier3d = { version = "0.34.0", features = ["debug-render", "simd-stable"] }
 rayon = "1.11.0"
 ron = "0.12.0"
 serde = { version = "1.0.228", features = ["derive"] }
 slotmap = "1.1.1"
-taffy = "0.9.2"
+taffy = { version = "0.9.2", default-features = false, features = [
+    "block_layout",
+    "content_size",
+    "detailed_layout_info",
+    "flexbox",
+    "grid",
+    "std",
+    "taffy_tree",
+]}
 thiserror = "2.0.18"
 tobj = "4.0.3"
 wgpu = "27.0.1"

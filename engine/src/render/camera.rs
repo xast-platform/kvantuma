@@ -2,14 +2,14 @@ use bytemuck::{Pod, Zeroable};
 use flecs_ecs::macros::Component;
 use glam::{Mat4, Vec3};
 use crate::{
-    Transform, 
     render::{
         RenderDevice, 
         buffer::{BufferHandle, BufferResourceDescriptor}, 
         registry::RenderRegistry, 
         shader_resource::{ShaderResource, ShaderResourceLayout},
         types::*,
-    }
+    },
+    math::Transform, 
 };
 
 #[derive(Component)]
@@ -20,7 +20,7 @@ pub struct CameraBuffer {
 
 impl CameraBuffer {
     pub fn new(
-        render_device: &mut RenderDevice, 
+        render_device: &RenderDevice, 
         registry: &mut RenderRegistry,
     ) -> CameraBuffer {
         let handle = registry.new_buffer::<CameraUniform>(
