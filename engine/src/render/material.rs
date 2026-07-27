@@ -46,6 +46,10 @@ pub trait Material: ComponentId {
         Some(Face::Back)
     }
 
+    fn topology() -> PrimitiveTopology {
+        PrimitiveTopology::TriangleList
+    }
+
     fn load_op() -> LoadOp<GpuColor> {
         LoadOp::Load
     }

@@ -38,6 +38,7 @@ pub struct RenderPipelineDescriptor<'a> {
     pub depth_compare: CompareFunction,
     pub front_face: FrontFace,
     pub cull_mode: Option<Face>,
+    pub topology: wgpu::PrimitiveTopology,
 }
 
 /// Descriptor for creating a compute pipeline.
@@ -99,7 +100,7 @@ impl Pipeline {
                 compilation_options: PipelineCompilationOptions::default(),
             }),
             primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList, 
+                topology: descriptor.topology,
                 strip_index_format: None,
                 front_face: descriptor.front_face,
                 cull_mode: descriptor.cull_mode,

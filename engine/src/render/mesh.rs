@@ -20,11 +20,34 @@ pub struct UiVertex {
     pub pos: Vec2,
 }
 
+#[derive(Pod, Zeroable, Clone, Copy, Debug)]
+#[repr(C)]
+pub struct DebugLineVertex {
+    pub position: Vec3,
+    pub color: Vec3,
+}
+
+impl DebugLineVertex {
+    const ATTRIBS: &[wgpu::VertexAttribute] = &wgpu::vertex_attr_array![
+        0 => Float32x3,
+        1 => Float32x3,
+    ];
+
+    pub fn vertex_buffer_layout() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<DebugLineVertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: Self::ATTRIBS,
+        }
+    }
+}
+
 // TODO: VertexTrait
 pub trait VertexTrait: Pod + 'static + Send + Sync {}
 impl VertexTrait for UiVertex {}
 impl VertexTrait for Vertex {}
 impl VertexTrait for GlyphVertex {}
+impl VertexTrait for DebugLineVertex {}
 
 impl UiVertex {
     const ATTRIBS: &[wgpu::VertexAttribute] = &wgpu::vertex_attr_array![

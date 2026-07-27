@@ -44,6 +44,7 @@ pub mod types {
         CompareFunction,
         FrontFace,
         Face,
+        PrimitiveTopology,
     };
 }
 

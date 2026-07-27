@@ -611,7 +611,7 @@ fn main() -> anyhow::Result<()> {
         .import_module::<TextMaterialModule>()
 
         .import_module::<InitSkyboxModule>()
-        .import_module::<PhysicsModule>()
+        .import_module::<PhysicsModule<true>>()
         // .load_plugin("test-plugin")?
         .run();
 

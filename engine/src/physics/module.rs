@@ -1,18 +1,16 @@
-use std::println;
-
 use flecs_ecs::{core::flecs::Singleton, prelude::*};
 use rapier3d::{dynamics::RigidBodyBuilder, geometry::ColliderBuilder};
 
 use crate::{
     Update, math::Transform, physics::{
-        components::{ColliderDescriptor, ColliderKind, ColliderMeshType, RigidBody, RigidBodyDescriptor, RigidBodyKind}, handler::PhysicsHandler,
+        components::{ColliderDescriptor, ColliderKind, ColliderMeshType, RigidBody, RigidBodyDescriptor, RigidBodyKind}, handler::PhysicsHandler, render_debug::PhysicsRenderDebugModule,
     }, render::mesh::{Mesh, Vertex},
 };
 
 #[derive(Component)]
-pub struct PhysicsModule;
+pub struct PhysicsModule<const DEBUG: bool>;
 
-impl Module for PhysicsModule {
+impl<const DEBUG: bool> Module for PhysicsModule<DEBUG> {
     fn module(world: &World) {
         world.component::<PhysicsHandler>().add_trait::<Singleton>();
         world.set(PhysicsHandler::new());
@@ -64,6 +62,10 @@ impl Module for PhysicsModule {
                 t.translation = rb.translation();
                 t.rotation = *rb.rotation();
             });
+
+        if DEBUG {
+            world.import::<PhysicsRenderDebugModule>();
+        }
     }
 }
 

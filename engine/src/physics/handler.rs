@@ -1,5 +1,6 @@
 use flecs_ecs::macros::Component;
 use glam::Vec3;
+use rapier3d::pipeline::{DebugRenderBackend, DebugRenderPipeline};
 use rapier3d::prelude::{CCDSolver, ImpulseJointSet, IntegrationParameters, IslandManager, MultibodyJointSet, RigidBodySet, ColliderSet, DefaultBroadPhase, NarrowPhase, PhysicsPipeline};
 
 use crate::physics::components::{Collider, RigidBody};
@@ -105,6 +106,14 @@ impl PhysicsHandler {
             &mut self.multibody_joints, 
             false,
         )
+    }
+
+    pub fn debug_render_colliders(
+        &self,
+        debug_pipeline: &mut DebugRenderPipeline,
+        backend: &mut impl DebugRenderBackend,
+    ) {
+        debug_pipeline.render_colliders(backend, &self.rigid_bodies, &self.colliders);
     }
 
     pub fn step(&mut self) {

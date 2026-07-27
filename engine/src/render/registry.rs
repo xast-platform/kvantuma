@@ -71,6 +71,7 @@ impl RenderRegistry {
                     depth_compare: M::depth_compare(),
                     front_face: M::front_face(),
                     cull_mode: M::cull_mode(),
+                    topology: M::topology(),
                 })
             );
     }
