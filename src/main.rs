@@ -8,7 +8,7 @@ use xastge::{
         window::{
             Action, CursorMode, Key, MouseButton, Window, WindowDescriptor, WindowEvent, WindowMode, WindowSize,
         },
-    }, math::Transform, physics::{components::{ColliderDescriptor, ColliderKind, RigidBodyDescriptor, RigidBodyKind}, module::PhysicsModule}, render::{
+    }, gamepad::GamepadModule, math::Transform, physics::{components::{ColliderDescriptor, ColliderKind, RigidBodyDescriptor, RigidBodyKind}, module::PhysicsModule}, render::{
         RenderSurface, 
         camera::{Camera, CameraBuffer, OrthographicCamera, PerspectiveCamera, build_orthographic_uniform, build_perspective_uniform}, 
         material::{ColorMaterial, ColorUiMaterial, Material, SkyboxMaterial}, 
@@ -612,6 +612,7 @@ fn main() -> anyhow::Result<()> {
 
         .import_module::<InitSkyboxModule>()
         .import_module::<PhysicsModule<true>>()
+        .import_module::<GamepadModule>()
         // .load_plugin("test-plugin")?
         .run();
 

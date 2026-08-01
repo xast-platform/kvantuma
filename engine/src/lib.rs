@@ -7,6 +7,7 @@ pub mod utils;
 pub mod plugin;
 pub mod math;
 pub mod time;
+pub mod gamepad;
 
 use flecs_ecs::macros::Component;
 
