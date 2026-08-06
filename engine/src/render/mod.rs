@@ -15,7 +15,7 @@ pub mod material;
 pub mod pass;
 pub mod draw_context;
 pub mod shader_resource;
-pub mod mesh;
+pub use crate::mesh;
 pub mod camera;
 pub mod animation;
 

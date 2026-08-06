@@ -3,31 +3,73 @@ name = "xastge"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["app", "physics", "gamepad", "plugin", "scene"]
+
+# Windowing + the game loop (`XastGE`). Pulls in `render`, since the app owns the render device.
+app = ["render", "dep:pollster"]
+# GPU rendering, meshes, materials, textures. Mutually coupled with `ui` (the render registry
+# uses the glyph atlas, and UI materials draw through the render device), so enabling either
+# enables both.
+render = ["ui", "dep:wgpu", "dep:glfw", "dep:image", "dep:tobj", "dep:bitflags", "dep:slotmap", "dep:pretty-type-name", "dep:gltf"]
+# Text/glyph atlas and UI materials. Requires `render` to draw.
+ui = ["render", "dep:ab_glyph"]
+# Rapier3d physics. Independent of `render` — collider building only touches raw `Mesh`/`Transform`
+# data (see `crate::mesh`). Debug-render overlay (`physics::render_debug`) is compiled in only
+# when `render` is also enabled.
+physics = ["dep:rapier3d"]
+# Gamepad input; standalone, no rendering dependency.
+gamepad = ["dep:gilrs"]
+# Dynamic plugin loading via `libloading`; standalone.
+plugin = ["dep:libloading"]
+# ECS scene (de)serialization: `Scene`, `SerializableComponent`. Only needs flecs_ecs + serde +
+# typetag, so this is what a headless tool (e.g. `xastge-scene`) should depend on.
+scene = ["dep:typetag"]
+
 [dependencies]
-ab_glyph = "0.2.32"
 anyhow = "1.0.101"
-bincode = "2.0.1"
-bitflags = "2.11.0"
+# Needed unconditionally by `crate::mesh` (Vertex/Mesh Pod data), independent of `render`.
 bytemuck = { version = "1.25.0", features = ["derive"] }
 flecs_ecs = "0.2.2"
-gilrs = "0.11.2"
 glam = { version = "0.33.2", features = ["serde", "bytemuck", "rand"] }
-gltf = { version = "1.4.1", features = ["extras"] }
-image = "0.25.9"
-kira = "0.12.0"
-libloading = "0.9.0"
 log = "0.4.29"
 parking_lot = "0.12.5"
 paste = "1.0.15"
-pollster = "0.4.0"
-pretty-type-name = "1.0.1"
 rand = "0.10.0"
-rapier3d = { version = "0.34.0", features = ["debug-render", "simd-stable"] }
-rayon = "1.11.0"
 ron = "0.12.0"
 serde = { version = "1.0.228", features = ["derive"] }
-slotmap = "1.1.1"
-taffy = { version = "0.9.2", default-features = false, features = [
+thiserror = "2.0.18"
+
+# render / ui
+ab_glyph = { version = "0.2.32", optional = true }
+bitflags = { version = "2.11.0", optional = true }
+gltf = { version = "1.4.1", features = ["extras"], optional = true }
+image = { version = "0.25.9", optional = true }
+pretty-type-name = { version = "1.0.1", optional = true }
+slotmap = { version = "1.1.1", optional = true }
+tobj = { version = "4.0.3", optional = true }
+wgpu = { version = "27.0.1", optional = true }
+
+# app
+pollster = { version = "0.4.0", optional = true }
+
+# physics
+rapier3d = { version = "0.34.0", features = ["debug-render", "simd-stable"], optional = true }
+
+# gamepad
+gilrs = { version = "0.11.2", optional = true }
+
+# plugin
+libloading = { version = "0.9.0", optional = true }
+
+# scene
+typetag = { version = "0.2.23", optional = true }
+
+# Currently unused by any module; kept optional so they don't add weight until something needs them.
+bincode = { version = "2.0.1", optional = true }
+kira = { version = "0.12.0", optional = true }
+rayon = { version = "1.11.0", optional = true }
+taffy = { version = "0.9.2", default-features = false, optional = true, features = [
     "block_layout",
     "content_size",
     "detailed_layout_info",
@@ -36,15 +78,12 @@ taffy = { version = "0.9.2", default-features = false, features = [
     "std",
     "taffy_tree",
 ]}
-thiserror = "2.0.18"
-tobj = "4.0.3"
-wgpu = "27.0.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-glfw = { version = "0.61.0", default-features = false, features = ["x11", "raw-window-handle-v0-6"] }
+glfw = { version = "0.61.0", default-features = false, features = ["x11", "raw-window-handle-v0-6"], optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-glfw = { version = "0.61.0", default-features = false, features = ["raw-window-handle-v0-6"] }
+glfw = { version = "0.61.0", default-features = false, features = ["raw-window-handle-v0-6"], optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-glfw = { version = "0.61.0", default-features = false, features = ["raw-window-handle-v0-6"] }
+glfw = { version = "0.61.0", default-features = false, features = ["raw-window-handle-v0-6"], optional = true }

@@ -1,13 +1,23 @@
+#[cfg(feature = "app")]
 pub mod app;
+#[cfg(feature = "render")]
 pub mod render;
+#[cfg(feature = "physics")]
 pub mod physics;
+#[cfg(feature = "ui")]
 pub mod ui;
+#[cfg(feature = "render")]
 pub mod error;
 pub mod utils;
+#[cfg(feature = "plugin")]
 pub mod plugin;
 pub mod math;
+pub mod mesh;
 pub mod time;
+#[cfg(feature = "gamepad")]
 pub mod gamepad;
+#[cfg(feature = "scene")]
+pub mod scene;
 
 use flecs_ecs::macros::Component;
 

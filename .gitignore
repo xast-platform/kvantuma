@@ -1,6 +1,11 @@
 /target
+Cargo.lock
+
 /engine/target
+/engine/Cargo.lock
+
 /scene/target
+/scene/Cargo.lock
+
 /assets/plugins/*.so
 /assets/plugins/*.dll
-Cargo.lock

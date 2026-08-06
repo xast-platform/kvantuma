@@ -2,10 +2,13 @@ use flecs_ecs::{core::flecs::Singleton, prelude::*};
 use rapier3d::{dynamics::RigidBodyBuilder, geometry::ColliderBuilder};
 
 use crate::{
-    Update, math::Transform, physics::{
-        components::{ColliderDescriptor, ColliderKind, ColliderMeshType, RigidBody, RigidBodyDescriptor, RigidBodyKind}, handler::PhysicsHandler, render_debug::PhysicsRenderDebugModule,
-    }, render::mesh::{Mesh, Vertex},
+    Update, math::Transform, mesh::{Mesh, Vertex}, physics::{
+        components::{ColliderDescriptor, ColliderKind, ColliderMeshType, RigidBody, RigidBodyDescriptor, RigidBodyKind}, handler::PhysicsHandler,
+    },
 };
+
+#[cfg(feature = "render")]
+use crate::physics::render_debug::PhysicsRenderDebugModule;
 
 #[derive(Component)]
 pub struct PhysicsModule<const DEBUG: bool>;
@@ -64,7 +67,11 @@ impl<const DEBUG: bool> Module for PhysicsModule<DEBUG> {
             });
 
         if DEBUG {
+            #[cfg(feature = "render")]
             world.import::<PhysicsRenderDebugModule>();
+
+            #[cfg(not(feature = "render"))]
+            log::warn!("Physics debug rendering requested, but the `render` feature is disabled");
         }
     }
 }

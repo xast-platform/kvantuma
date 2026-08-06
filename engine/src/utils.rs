@@ -1,9 +1,14 @@
-use anyhow::{Context, Result, bail};
 use flecs_ecs::macros::Component;
 use glam::{Vec2, Vec3};
+
+#[cfg(feature = "render")]
+use anyhow::{Context, Result, bail};
+#[cfg(feature = "render")]
 use image::GenericImageView;
+#[cfg(feature = "render")]
 use std::fs;
 
+#[cfg(feature = "render")]
 pub fn load_cubemap(path: &str) -> Result<()> {
 	let input_path = std::path::Path::new(path);
 	if !input_path.exists() {

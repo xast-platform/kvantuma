@@ -10,3 +10,4 @@ oidn = "2.3.3"
 ron = "0.12.1"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
+xastge = { path = "../engine", default-features = false, features = ["scene"] }

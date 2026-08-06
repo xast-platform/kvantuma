@@ -2,9 +2,10 @@ use bytemuck::{Pod, Zeroable};
 use flecs_ecs::macros::Component;
 use glam::{Vec2, Vec3, Vec4};
 
-use crate::{ui::atlas::GlyphVertex, utils::Rect};
+use crate::utils::Rect;
 
-use super::{Drawable, RenderDevice, buffer::BufferHandle, registry::RenderRegistry, types::*};
+#[cfg(feature = "render")]
+use crate::{ui::atlas::GlyphVertex, render::{Drawable, RenderDevice, buffer::BufferHandle, registry::RenderRegistry, types::*}};
 
 #[derive(Pod, Zeroable, Clone, Copy, Debug)]
 #[repr(C)]
@@ -27,59 +28,6 @@ pub struct DebugLineVertex {
     pub color: Vec3,
 }
 
-impl DebugLineVertex {
-    const ATTRIBS: &[wgpu::VertexAttribute] = &wgpu::vertex_attr_array![
-        0 => Float32x3,
-        1 => Float32x3,
-    ];
-
-    pub fn vertex_buffer_layout() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<DebugLineVertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: Self::ATTRIBS,
-        }
-    }
-}
-
-// TODO: VertexTrait
-pub trait VertexTrait: Pod + 'static + Send + Sync {}
-impl VertexTrait for UiVertex {}
-impl VertexTrait for Vertex {}
-impl VertexTrait for GlyphVertex {}
-impl VertexTrait for DebugLineVertex {}
-
-impl UiVertex {
-    const ATTRIBS: &[wgpu::VertexAttribute] = &wgpu::vertex_attr_array![
-        0 => Float32x2,
-    ];
-
-    pub fn vertex_buffer_layout() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<UiVertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: Self::ATTRIBS,
-        }
-    }
-}
-
-
-impl Vertex {
-    const ATTRIBS: &[wgpu::VertexAttribute] = &wgpu::vertex_attr_array![
-        0 => Float32x3,
-        1 => Float32x3,
-        2 => Float32x2,
-    ];
-
-    pub fn vertex_buffer_layout() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: Self::ATTRIBS,
-        }
-    }
-}
-
 #[derive(Pod, Zeroable, Clone, Copy, Debug)]
 #[repr(C)]
 pub struct SkinnedVertex {
@@ -91,22 +39,6 @@ pub struct SkinnedVertex {
 }
 
 impl SkinnedVertex {
-    const ATTRIBS: &[wgpu::VertexAttribute] = &wgpu::vertex_attr_array![
-        0 => Float32x3,
-        1 => Float32x3,
-        2 => Float32x2,
-        3 => Float32x4,
-        4 => Float32x4,
-    ];
-
-    pub fn vertex_buffer_layout() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<SkinnedVertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: Self::ATTRIBS,
-        }
-    }
-
     pub fn from_vertex(vertex: Vertex) -> Self {
         Self {
             position: vertex.position,
@@ -118,23 +50,106 @@ impl SkinnedVertex {
     }
 }
 
+// GPU vertex buffer layouts: these only make sense when there is a render device to feed them to.
+#[cfg(feature = "render")]
+mod gpu {
+    use super::*;
+
+    impl DebugLineVertex {
+        const ATTRIBS: &[wgpu::VertexAttribute] = &wgpu::vertex_attr_array![
+            0 => Float32x3,
+            1 => Float32x3,
+        ];
+
+        pub fn vertex_buffer_layout() -> wgpu::VertexBufferLayout<'static> {
+            wgpu::VertexBufferLayout {
+                array_stride: std::mem::size_of::<DebugLineVertex>() as wgpu::BufferAddress,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: Self::ATTRIBS,
+            }
+        }
+    }
+
+    // TODO: VertexTrait
+    pub trait VertexTrait: Pod + 'static + Send + Sync {}
+    impl VertexTrait for UiVertex {}
+    impl VertexTrait for Vertex {}
+    impl VertexTrait for GlyphVertex {}
+    impl VertexTrait for DebugLineVertex {}
+
+    impl UiVertex {
+        const ATTRIBS: &[wgpu::VertexAttribute] = &wgpu::vertex_attr_array![
+            0 => Float32x2,
+        ];
+
+        pub fn vertex_buffer_layout() -> wgpu::VertexBufferLayout<'static> {
+            wgpu::VertexBufferLayout {
+                array_stride: std::mem::size_of::<UiVertex>() as wgpu::BufferAddress,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: Self::ATTRIBS,
+            }
+        }
+    }
+
+    impl Vertex {
+        const ATTRIBS: &[wgpu::VertexAttribute] = &wgpu::vertex_attr_array![
+            0 => Float32x3,
+            1 => Float32x3,
+            2 => Float32x2,
+        ];
+
+        pub fn vertex_buffer_layout() -> wgpu::VertexBufferLayout<'static> {
+            wgpu::VertexBufferLayout {
+                array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: Self::ATTRIBS,
+            }
+        }
+    }
+
+    impl SkinnedVertex {
+        const ATTRIBS: &[wgpu::VertexAttribute] = &wgpu::vertex_attr_array![
+            0 => Float32x3,
+            1 => Float32x3,
+            2 => Float32x2,
+            3 => Float32x4,
+            4 => Float32x4,
+        ];
+
+        pub fn vertex_buffer_layout() -> wgpu::VertexBufferLayout<'static> {
+            wgpu::VertexBufferLayout {
+                array_stride: std::mem::size_of::<SkinnedVertex>() as wgpu::BufferAddress,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: Self::ATTRIBS,
+            }
+        }
+    }
+}
+
+#[cfg(feature = "render")]
+pub use gpu::VertexTrait;
+
 #[derive(Debug, Component, Clone)]
 pub struct Mesh<V: Send + Sync + 'static> {
     pub vertices: Vec<V>,
     pub indices: Vec<u32>,
 
+    #[cfg(feature = "render")]
     pub vertex_buffer: Option<BufferHandle>,
+    #[cfg(feature = "render")]
     pub index_buffer: Option<BufferHandle>,
 }
 
 impl<V: Send + Sync + 'static> Default for Mesh<V> {
     fn default() -> Self {
-        Mesh { 
-            vertices: vec![], 
-            indices: vec![], 
-            vertex_buffer: None, 
+        Mesh {
+            vertices: vec![],
+            indices: vec![],
+            #[cfg(feature = "render")]
+            vertex_buffer: None,
+            #[cfg(feature = "render")]
             index_buffer: None,
-         }
+        }
     }
 }
 
@@ -143,12 +158,15 @@ impl<V: Send + Sync + 'static> Mesh<V> {
         Mesh {
             vertices,
             indices,
+            #[cfg(feature = "render")]
             vertex_buffer: None,
+            #[cfg(feature = "render")]
             index_buffer: None,
         }
     }
 }
 
+#[cfg(feature = "render")]
 impl Mesh<Vertex> {
     pub fn load_obj(path: &str) -> Self {
         let (mut models, _) = tobj::load_obj(
@@ -160,27 +178,27 @@ impl Mesh<Vertex> {
                 ..Default::default()
             },
         ).expect("Cannot load OBJ file");
-                
+
         let m = models.swap_remove(0);
 
         let mut vertices = Vec::<Vertex>::new();
         let indices = m.mesh.indices;
-        
-        for i in 0..m.mesh.positions.len() / 3 {                
+
+        for i in 0..m.mesh.positions.len() / 3 {
             let texcoord: Vec2;
-            
+
             let position = Vec3::new(
                 m.mesh.positions[i*3],
                 m.mesh.positions[i*3+1],
                 m.mesh.positions[i*3+2],
             );
-            
+
             let normal = Vec3::new(
                 m.mesh.normals[i*3],
                 m.mesh.normals[i*3+1],
                 m.mesh.normals[i*3+2],
             );
-            
+
             if i*2 < m.mesh.texcoords.len() {
                 texcoord = Vec2::new(
                     m.mesh.texcoords[i*2],
@@ -189,18 +207,18 @@ impl Mesh<Vertex> {
             } else {
                 texcoord = Vec2::ZERO;
             }
-            
+
             vertices.push(Vertex {
                 position,
                 normal,
                 texcoord,
             });
         }
-                    
+
         Mesh {
             vertices,
             indices,
-            
+
             vertex_buffer: None,
             index_buffer: None,
         }
@@ -259,15 +277,11 @@ impl Mesh<UiVertex> {
             12, 14, 15,
         ];
 
-        Mesh {
-            vertices,
-            indices,
-            vertex_buffer: None,
-            index_buffer: None,
-        }
+        Mesh::new(vertices, indices)
     }
 }
 
+#[cfg(feature = "render")]
 impl<V: Pod + Send + Sync + 'static> Drawable for Mesh<V> {
     fn update(&mut self, render_device: &mut RenderDevice, registry: &mut RenderRegistry) {
         if self.vertex_buffer.is_none() {
@@ -283,16 +297,16 @@ impl<V: Pod + Send + Sync + 'static> Drawable for Mesh<V> {
         }
 
         let Some(vb) = self.vertex_buffer else { unreachable!() };
-        
+
         registry
-            .get_buffer(vb) 
+            .get_buffer(vb)
             .expect("Cannot call update() on Mesh")
             .fill_exact(render_device, 0, &self.vertices)
             .unwrap();
 
         if let Some(ib) = self.index_buffer {
             registry
-                .get_buffer(ib) 
+                .get_buffer(ib)
                 .expect("Cannot call update() on Mesh")
                 .fill_exact(render_device, 0, &self.indices)
                 .unwrap();

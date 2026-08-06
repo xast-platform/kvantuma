@@ -1,5 +1,6 @@
 use flecs_ecs::macros::Component;
 
+#[cfg(feature = "render")]
 use crate::render::InstanceData;
 
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
@@ -28,6 +29,7 @@ impl Transform {
     }
 }
 
+#[cfg(feature = "render")]
 impl InstanceData for Transform {
     type UniformData = glam::Mat4;
 
