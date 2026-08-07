@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-clap = { version = "4.6.0", features = ["derive"] }
+anyhow = "1.0.104"
+clap = { version = "4.6.0", default-features = false, features = ["derive", "error-context", "help", "std"] }
 embree = "0.3.8"
 oidn = "2.3.3"
 ron = "0.12.1"

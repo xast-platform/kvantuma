@@ -2,5 +2,9 @@
     "rust-analyzer.linkedProjects": [
         "Cargo.toml",
         "scene/Cargo.toml"
-    ]
+    ],
+    "rust-analyzer.cargo.extraEnv": {
+        "OIDN_DIR": "/opt/oidn",
+        "LD_LIBRARY_PATH": "/opt/oidn/lib:/opt/tbb/lib"
+    }
 }
