@@ -9,3 +9,5 @@ Cargo.lock
 
 /assets/plugins/*.so
 /assets/plugins/*.dll
+
+.direnv/
